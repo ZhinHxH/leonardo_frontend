@@ -18,7 +18,7 @@ import {
 } from 'recharts';
 
 // Paleta de colores sobrios
-const CHART_COLORS = {
+export const CHART_COLORS = {
   primary: '#2E86AB',
   secondary: '#A23B72',
   success: '#F18F01',
