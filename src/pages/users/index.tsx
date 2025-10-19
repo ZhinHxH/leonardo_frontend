@@ -229,20 +229,60 @@ export default function Users() {
       return { status: 'none', label: 'Sin membresía', color: 'default' };
     }
     
-    const activeMembership = user.memberships.find(m => {
+    const now = new Date();
+    
+    // Filtrar membresías activas (que no han expirado)
+    const activeMemberships = user.memberships.filter(m => {
       const endDate = new Date(m.end_date);
-      return endDate > new Date();
+      return endDate > now;
     });
     
-    if (activeMembership) {
+    if (activeMemberships.length === 0) {
+      return { status: 'expired', label: 'Expirada', color: 'warning' };
+    }
+    
+    // Si hay una sola membresía activa
+    if (activeMemberships.length === 1) {
+      const membership = activeMemberships[0];
       return { 
         status: 'active', 
-        label: `${activeMembership.type} - Hasta ${new Date(activeMembership.end_date).toLocaleDateString()}`, 
+        label: `${membership.type} - Hasta ${new Date(membership.end_date).toLocaleDateString()}`, 
         color: 'success' 
       };
     }
     
-    return { status: 'expired', label: 'Expirada', color: 'warning' };
+    // Si hay múltiples membresías activas, sumar los días
+    console.log('🔍 Usuario con múltiples membresías:', user.name, activeMemberships);
+    
+    // Ordenar las membresías por fecha de fin (la más cercana primero)
+    const sortedMemberships = [...activeMemberships].sort((a, b) => 
+      new Date(a.end_date).getTime() - new Date(b.end_date).getTime()
+    );
+    
+    // Tomar la primera membresía como base
+    let currentEndDate = new Date(sortedMemberships[0].end_date);
+    
+    // Sumar los días de las membresías restantes
+    for (let i = 1; i < sortedMemberships.length; i++) {
+      const membership = sortedMemberships[i];
+      const startDate = new Date(membership.start_date);
+      const endDate = new Date(membership.end_date);
+      
+      // Calcular días de la membresía
+      const daysInMembership = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Agregar días a la fecha actual acumulada
+      currentEndDate.setDate(currentEndDate.getDate() + daysInMembership);
+    }
+    
+    const totalActiveMemberships = activeMemberships.length;
+    const membershipTypes = [...new Set(activeMemberships.map(m => m.type))].join(', ');
+    
+    return { 
+      status: 'active', 
+      label: `${totalActiveMemberships} Membresías (${membershipTypes}) - Hasta ${currentEndDate.toLocaleDateString()}`, 
+      color: 'success' 
+    };
   };
 
   const handleAddUser = () => {
