@@ -30,7 +30,8 @@ import {
   Tab,
   Divider,
   CircularProgress,
-  Alert
+  Alert,
+  TablePagination
 } from '@mui/material';
 import {
   People as PeopleIcon,
@@ -82,57 +83,9 @@ interface ClinicalRecord {
   created_by: string;
 }
 
-// Datos de ejemplo
-const mockUsers: User[] = [
-  {
-    id: 1,
-    name: 'Juan Pérez',
-    email: 'juan@email.com',
-    role: 'member',
-    phone: '3001234567',
-    dni: '12345678',
-    is_active: true,
-    created_at: '2024-01-15',
-    membership_status: 'active'
-  },
-  {
-    id: 2,
-    name: 'María García',
-    email: 'maria@email.com',
-    role: 'trainer',
-    phone: '3009876543',
-    dni: '87654321',
-    is_active: true,
-    created_at: '2024-01-10',
-    membership_status: 'none'
-  }
-];
-
-const mockClinicalHistory: ClinicalRecord[] = [
-  {
-    id: 1,
-    date: '2024-01-15',
-    type: 'weight_update',
-    weight: 75.5,
-    notes: 'Peso inicial registrado',
-    created_by: 'Dr. Smith'
-  },
-  {
-    id: 2,
-    date: '2024-01-20',
-    type: 'nutritionist_note',
-    notes: 'Plan nutricional ajustado. Reducir carbohidratos en la cena.',
-    created_by: 'Nutricionista López'
-  }
-];
-
 export default function Users() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('Todos');
-  const [statusFilter, setStatusFilter] = useState('Todos');
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [error, setError] = useState('');
@@ -149,61 +102,75 @@ export default function Users() {
   });
   const [editForm, setEditForm] = useState<Partial<User>>({});
 
+  // Estados de paginación
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [totalUsers, setTotalUsers] = useState(0);
+
+  // Estados de filtros
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('Todos');
+  const [statusFilter, setStatusFilter] = useState('Todos');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  // Debounce para búsqueda
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Cargar usuarios cuando cambien los filtros o la paginación
+  useEffect(() => {
+    loadUsers();
+  }, [page, rowsPerPage, roleFilter, statusFilter, debouncedSearchTerm]);
+
   // Cargar usuarios desde el backend
   const loadUsers = async () => {
     setLoading(true);
     setError('');
     
     try {
+      const currentPage = page + 1; // Convertir a base 1 para el backend
+      
       const response = await getClients({
-        search: searchTerm,
-        page: 1,
-        limit: 1000 // Cargar todos para filtros locales
+        search: debouncedSearchTerm || undefined,
+        role: roleFilter !== 'Todos' ? roleFilter : undefined,
+        status: statusFilter !== 'Todos' ? statusFilter : undefined,
+        page: currentPage,
+        limit: rowsPerPage
       });
       
       console.log('📦 Usuarios cargados:', response);
       
-      const usersList = response.users || response.items || response || [];
+      // Manejar diferentes estructuras de respuesta
+      const usersList = response.users || response.items || response.data || response || [];
+      const total = response.total || response.count || usersList.length;
+      
       setUsers(usersList);
+      setTotalUsers(total);
       
     } catch (err: any) {
       console.error('❌ Error cargando usuarios:', err);
       setError(err.message || 'Error cargando usuarios');
       setUsers([]);
+      setTotalUsers(0);
     } finally {
       setLoading(false);
     }
   };
 
-  // Cargar usuarios al inicializar
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  // Handlers de paginación
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
 
-  // Filtrar usuarios
-  useEffect(() => {
-    let filtered = users;
-
-    if (searchTerm) {
-      filtered = filtered.filter(user =>
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.dni?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (roleFilter !== 'Todos') {
-      filtered = filtered.filter(user => user.role === roleFilter);
-    }
-
-    if (statusFilter !== 'Todos') {
-      filtered = filtered.filter(user => 
-        statusFilter === 'active' ? user.is_active : !user.is_active
-      );
-    }
-
-    setFilteredUsers(filtered);
-  }, [users, searchTerm, roleFilter, statusFilter]);
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0); // Resetear a la primera página
+  };
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -396,14 +363,14 @@ export default function Users() {
                     </Grid>
                     <Grid item xs={12} md={2}>
                       <Typography variant="body2" color="text.secondary">
-                        {filteredUsers.length} usuarios encontrados
+                        {totalUsers} usuarios encontrados
                       </Typography>
                     </Grid>
                   </Grid>
                 </CardContent>
               </Card>
 
-              {/* Tabla de usuarios */}
+              {/* Tabla de usuarios con paginación */}
               <TableContainer component={Paper} elevation={1}>
                 <Table>
                   <TableHead>
@@ -417,82 +384,117 @@ export default function Users() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredUsers.map((user) => (
-                      <TableRow key={user.id} hover>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={2}>
-                            <Avatar sx={{ bgcolor: 'primary.main' }}>
-                              {user.name.charAt(0)}
-                            </Avatar>
-                            <Box>
-                              <Typography variant="subtitle2" fontWeight="bold">
-                                {user.name}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {user.email}
-                              </Typography>
-                              {user.dni && (
-                                <Typography variant="caption" color="text.secondary">
-                                  DNI: {user.dni}
-                                </Typography>
-                              )}
-                            </Box>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={getRoleLabel(user.role)}
-                            color={getRoleColor(user.role) as any}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {user.phone || 'No registrado'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          {(() => {
-                            const membershipInfo = getMembershipStatus(user);
-                            return (
-                              <Chip
-                                label={membershipInfo.label}
-                                color={membershipInfo.color as any}
-                                size="small"
-                              />
-                            );
-                          })()}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={user.is_active ? 'Activo' : 'Inactivo'}
-                            color={user.is_active ? 'success' : 'error'}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Box display="flex" gap={1}>
-                            <IconButton size="small" color="info" onClick={() => handleViewUser(user)}>
-                              <Visibility />
-                            </IconButton>
-                            <IconButton size="small" color="primary" onClick={() => handleEditUser(user)}>
-                              <Edit />
-                            </IconButton>
-                            <IconButton size="small" color="error" onClick={() => handleDeleteUser(user)}>
-                              <Delete />
-                            </IconButton>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                          <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+                            <CircularProgress />
+                            <Typography color="text.secondary">Cargando usuarios...</Typography>
                           </Box>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : users.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                          <Typography color="text.secondary">
+                            No se encontraron usuarios
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      users.map((user) => (
+                        <TableRow key={user.id} hover>
+                          <TableCell>
+                            <Box display="flex" alignItems="center" gap={2}>
+                              <Avatar sx={{ bgcolor: 'primary.main' }}>
+                                {user.name.charAt(0)}
+                              </Avatar>
+                              <Box>
+                                <Typography variant="subtitle2" fontWeight="bold">
+                                  {user.name}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {user.email}
+                                </Typography>
+                                {user.dni && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    DNI: {user.dni}
+                                  </Typography>
+                                )}
+                              </Box>
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={getRoleLabel(user.role)}
+                              color={getRoleColor(user.role) as any}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {user.phone || 'No registrado'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const membershipInfo = getMembershipStatus(user);
+                              return (
+                                <Chip
+                                  label={membershipInfo.label}
+                                  color={membershipInfo.color as any}
+                                  size="small"
+                                />
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={user.is_active ? 'Activo' : 'Inactivo'}
+                              color={user.is_active ? 'success' : 'error'}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Box display="flex" gap={1}>
+                              <IconButton size="small" color="info" onClick={() => handleViewUser(user)}>
+                                <Visibility />
+                              </IconButton>
+                              <IconButton size="small" color="primary" onClick={() => handleEditUser(user)}>
+                                <Edit />
+                              </IconButton>
+                              <IconButton size="small" color="error" onClick={() => handleDeleteUser(user)}>
+                                <Delete />
+                              </IconButton>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
+                
+                {/* Paginador de MUI */}
+                <TablePagination
+                  rowsPerPageOptions={[10, 20, 50, 100]}
+                  component="div"
+                  count={totalUsers}
+                  rowsPerPage={rowsPerPage}
+                  page={page}
+                  onPageChange={handleChangePage}
+                  onRowsPerPageChange={handleChangeRowsPerPage}
+                  labelRowsPerPage="Usuarios por página:"
+                  labelDisplayedRows={({ from, to, count }) => 
+                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
+                  }
+                />
               </TableContainer>
             </Paper>
           </Box>
         </Box>
       </Box>
 
+      {/* Los diálogos se mantienen igual... */}
       {/* Dialog de detalle de usuario */}
       <Dialog
         open={userDetailDialog}

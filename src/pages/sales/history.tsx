@@ -27,7 +27,9 @@ import {
   ListItem,
   ListItemText,
   Avatar,
-  Tooltip
+  Tooltip,
+  TablePagination,
+  CircularProgress
 } from '@mui/material';
 import {
   Receipt,
@@ -46,9 +48,9 @@ import { AdminRoute } from '../../components/AdminRoute';
 import Sidebar from '../../components/Sidebar';
 import Navbar from '../../components/Navbar';
 import { useAuth } from '../../contexts/AuthContext';
-import { Pagination } from '../../components/Pagination';
 import salesService from '../../services/sales';
 import CashClosure from '../../components/CashClosure';
+import { SaleDetail } from '../../services/sales';
 
 interface Sale {
   id: number;
@@ -85,19 +87,14 @@ interface Sale {
   }>;
 }
 
-// Las ventas se cargarán desde el backend
-
 export default function SalesHistory() {
   const { user } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
-  const [filteredSales, setFilteredSales] = useState<Sale[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('Todos');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Estados de modales
-  const [detailDialog, setDetailDialog] = useState<{ open: boolean; sale: Sale | null }>({
+  const [detailDialog, setDetailDialog] = useState<{ open: boolean; sale: SaleDetail | null }>({
     open: false,
     sale: null
   });
@@ -117,11 +114,29 @@ export default function SalesHistory() {
     return today.toISOString();
   });
 
-  // Paginación
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  // Estados de paginación
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [totalSales, setTotalSales] = useState(0);
-  const [perPage] = useState(20);
+
+  // Estados de filtros
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Todos');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  // Debounce para búsqueda
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Cargar ventas cuando cambien los filtros o la paginación
+  useEffect(() => {
+    loadSales();
+  }, [page, rowsPerPage, statusFilter, debouncedSearchTerm]);
 
   // Cargar ventas desde el backend
   const loadSales = async () => {
@@ -129,49 +144,36 @@ export default function SalesHistory() {
     setError('');
     
     try {
+      const currentPage = page + 1; // Convertir a base 1 para el backend
+      
       const response = await salesService.getSales({
         page: currentPage,
-        per_page: perPage,
-        status: statusFilter !== 'Todos' ? statusFilter : undefined
+        per_page: rowsPerPage,
+        status: statusFilter !== 'Todos' ? statusFilter : undefined,
+        search: debouncedSearchTerm || undefined
       });
       
-      setSales(response.sales || []);
+      setSales(response.sales as Sale[] || []);
       setTotalSales(response.total || 0);
-      setTotalPages(response.total_pages || 1);
       
     } catch (err: any) {
       setError(err.message || 'Error cargando ventas');
       setSales([]);
+      setTotalSales(0);
     } finally {
       setLoading(false);
     }
   };
 
-  // Cargar ventas al inicializar y cuando cambien los filtros
-  useEffect(() => {
-    loadSales();
-  }, [currentPage, statusFilter]);
+  // Handlers de paginación
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
 
-  // Filtrar ventas
-  useEffect(() => {
-    let filtered = sales;
-
-    if (searchTerm) {
-      filtered = filtered.filter(sale =>
-        sale.sale_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sale.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sale.seller_name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (statusFilter !== 'Todos') {
-      filtered = filtered.filter(sale => sale.status === statusFilter);
-    }
-
-    setFilteredSales(filtered);
-    setTotalSales(filtered.length);
-    setTotalPages(Math.ceil(filtered.length / perPage));
-  }, [sales, searchTerm, statusFilter]);
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0); // Resetear a la primera página
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -236,7 +238,11 @@ export default function SalesHistory() {
     try {
       // Obtener detalles completos de la venta
       const saleDetails = await salesService.getSaleDetails(sale.id);
-      setDetailDialog({ open: true, sale: saleDetails.sale });
+      console.log("Sale Details: ", saleDetails);
+      const detailDialogg = { open: true, sale: saleDetails as unknown as SaleDetail | null };
+      console.log("detailDialogg: ", detailDialogg);
+      console.log("type of detailDialogg: ", typeof detailDialogg);
+      setDetailDialog(detailDialogg);
     } catch (err: any) {
       setError(err.message || 'Error obteniendo detalles de la venta');
     } finally {
@@ -298,7 +304,7 @@ export default function SalesHistory() {
           <Toolbar />
           <Box p={4}>
             <Paper elevation={2} sx={{ p: 3 }}>
-              <Box display="flex" justifyContent="between" alignItems="center" mb={3}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                 <Box display="flex" alignItems="center">
                   <Receipt sx={{ mr: 2, color: 'primary.main' }} />
                   <Typography variant="h4" component="h1">
@@ -387,106 +393,129 @@ export default function SalesHistory() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredSales.slice((currentPage - 1) * perPage, currentPage * perPage).map((sale) => (
-                      <TableRow key={sale.id} hover>
-                        <TableCell>
-                          <Typography variant="subtitle2" fontWeight="bold">
-                            {sale.sale_number}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Vendedor: {sale.seller_name}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          {sale.customer_name ? (
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <Avatar sx={{ width: 24, height: 24 }}>
-                                {sale.customer_name.charAt(0)}
-                              </Avatar>
-                              <Typography variant="body2">
-                                {sale.customer_name}
-                              </Typography>
-                            </Box>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              Cliente General
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={getSaleTypeLabel(sale.sale_type)}
-                            size="small"
-                            icon={sale.sale_type === 'membership' ? <FitnessCenter /> : <ShoppingCart />}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body1" fontWeight="bold">
-                            {formatPrice(sale.total_amount)}
-                          </Typography>
-                          {sale.discount_amount > 0 && (
-                            <Typography variant="caption" color="success.main">
-                              Desc: {formatPrice(sale.discount_amount)}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {getPaymentMethodLabel(sale.payment_method)}
-                          </Typography>
-                          {sale.change_amount > 0 && (
-                            <Typography variant="caption" color="text.secondary">
-                              Cambio: {formatPrice(sale.change_amount)}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={getStatusLabel(sale.status)}
-                            color={getStatusColor(sale.status) as any}
-                            size="small"
-                          />
-                          {sale.is_reversed && (
-                            <Chip label="Reversada" color="warning" size="small" sx={{ ml: 0.5 }} />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {formatDate(sale.created_at)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Box display="flex" gap={0.5}>
-                            <Tooltip title="Ver detalles">
-                              <IconButton size="small" color="info" onClick={() => handleViewSale(sale)}>
-                                <Visibility />
-                              </IconButton>
-                            </Tooltip>
-                            {canReverseSales && sale.can_be_reversed && !sale.is_reversed && (
-                              <Tooltip title="Reversar venta">
-                                <IconButton size="small" color="warning" onClick={() => handleReverseSale(sale)}>
-                                  <Undo />
-                                </IconButton>
-                              </Tooltip>
-                            )}
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                          <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+                            <CircularProgress />
+                            <Typography color="text.secondary">Cargando ventas...</Typography>
                           </Box>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : sales.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                          <Typography color="text.secondary">
+                            No se encontraron ventas
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      sales.map((sale) => (
+                        <TableRow key={sale.id} hover>
+                          <TableCell>
+                            <Typography variant="subtitle2" fontWeight="bold">
+                              {sale.sale_number}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Vendedor: {sale.seller_name}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            {sale.customer_name ? (
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <Avatar sx={{ width: 24, height: 24 }}>
+                                  {sale.customer_name.charAt(0)}
+                                </Avatar>
+                                <Typography variant="body2">
+                                  {sale.customer_name}
+                                </Typography>
+                              </Box>
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">
+                                Cliente General
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={getSaleTypeLabel(sale.sale_type)}
+                              size="small"
+                              icon={sale.sale_type === 'membership' ? <FitnessCenter /> : <ShoppingCart />}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body1" fontWeight="bold">
+                              {formatPrice(sale.total_amount)}
+                            </Typography>
+                            {sale.discount_amount > 0 && (
+                              <Typography variant="caption" color="success.main">
+                                Desc: {formatPrice(sale.discount_amount)}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {getPaymentMethodLabel(sale.payment_method)}
+                            </Typography>
+                            {sale.change_amount > 0 && (
+                              <Typography variant="caption" color="text.secondary">
+                                Cambio: {formatPrice(sale.change_amount)}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={getStatusLabel(sale.status)}
+                              color={getStatusColor(sale.status) as any}
+                              size="small"
+                            />
+                            {sale.is_reversed && (
+                              <Chip label="Reversada" color="warning" size="small" sx={{ ml: 0.5 }} />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {formatDate(sale.created_at)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Box display="flex" gap={0.5}>
+                              <Tooltip title="Ver detalles">
+                                <IconButton size="small" color="info" onClick={() => handleViewSale(sale)}>
+                                  <Visibility />
+                                </IconButton>
+                              </Tooltip>
+                              {canReverseSales && sale.can_be_reversed && !sale.is_reversed && (
+                                <Tooltip title="Reversar venta">
+                                  <IconButton size="small" color="warning" onClick={() => handleReverseSale(sale)}>
+                                    <Undo />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
+                
+                {/* Paginador de MUI */}
+                <TablePagination
+                  rowsPerPageOptions={[5, 10, 20, 50, 100]}
+                  component="div"
+                  count={totalSales}
+                  rowsPerPage={rowsPerPage}
+                  page={page}
+                  onPageChange={handleChangePage}
+                  onRowsPerPageChange={handleChangeRowsPerPage}
+                  labelRowsPerPage="Ventas por página:"
+                  labelDisplayedRows={({ from, to, count }) => 
+                    `${from}-${to} de ${count !== -1 ? count : `más de ${to}`}`
+                  }
+                />
               </TableContainer>
-
-              {/* Paginación */}
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                totalItems={totalSales}
-                itemsPerPage={perPage}
-                onPageChange={setCurrentPage}
-                loading={loading}
-                showItemsPerPage={false}
-              />
             </Paper>
           </Box>
         </Box>
@@ -500,13 +529,13 @@ export default function SalesHistory() {
         fullWidth
       >
         <DialogTitle>
-          <Box display="flex" alignItems="center" justifyContent="between">
+          <Box display="flex" alignItems="center" justifyContent="space-between">
             <Typography variant="h6">
-              📋 Detalle de Venta {detailDialog.sale?.sale_number}
+              📋 Detalle de Venta {detailDialog.sale?.['sale']?.['sale_number']}
             </Typography>
             <Chip
-              label={getStatusLabel(detailDialog.sale?.status || '')}
-              color={getStatusColor(detailDialog.sale?.status || '') as any}
+              label={getStatusLabel(detailDialog.sale?.['sale']?.['status'] || '')}
+              color={getStatusColor(detailDialog.sale?.['sale']?.['status'] || '') as any}
             />
           </Box>
         </DialogTitle>
@@ -518,25 +547,25 @@ export default function SalesHistory() {
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" color="text.secondary">Cliente</Typography>
                   <Typography variant="body1">
-                    {detailDialog.sale.customer_name || 'Cliente General'}
+                    {detailDialog.sale?.['sale']?.['customer_name'] || 'Cliente General'}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" color="text.secondary">Vendedor</Typography>
                   <Typography variant="body1">
-                    {detailDialog.sale.seller_name}
+                    {detailDialog.sale?.['sale']?.['seller_name']}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" color="text.secondary">Fecha</Typography>
                   <Typography variant="body1">
-                    {formatDate(detailDialog.sale.created_at)}
+                    {formatDate(detailDialog?.sale?.['sale']?.['created_at']?.toString() || '')}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" color="text.secondary">Método de Pago</Typography>
                   <Typography variant="body1">
-                    {getPaymentMethodLabel(detailDialog.sale.payment_method)}
+                    {getPaymentMethodLabel(detailDialog.sale?.['sale']?.['payment_method'] || '')}
                   </Typography>
                 </Grid>
               </Grid>
@@ -544,7 +573,7 @@ export default function SalesHistory() {
               <Divider sx={{ mb: 3 }} />
 
               {/* Items de productos */}
-              {detailDialog.sale.product_items && detailDialog.sale.product_items.length > 0 && (
+              {detailDialog.sale?.['sale']?.['product_items'] && detailDialog.sale?.['sale']?.['product_items']?.length > 0 && (
                 <Box mb={3}>
                   <Typography variant="h6" gutterBottom>
                     🛍️ Productos
@@ -560,7 +589,7 @@ export default function SalesHistory() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {detailDialog.sale.product_items.map((item) => (
+                        {detailDialog.sale?.['sale']?.['product_items']?.map((item) => (
                           <TableRow key={item.id}>
                             <TableCell>{item.product_name}</TableCell>
                             <TableCell align="right">{item.quantity}</TableCell>
@@ -575,13 +604,13 @@ export default function SalesHistory() {
               )}
 
               {/* Items de membresías */}
-              {detailDialog.sale.membership_items && detailDialog.sale.membership_items.length > 0 && (
+              {detailDialog.sale?.['sale']?.['membership_items'] && detailDialog.sale?.['sale']?.['membership_items']?.length > 0 && (
                 <Box mb={3}>
                   <Typography variant="h6" gutterBottom>
                     🏋️ Membresías
                   </Typography>
                   <List>
-                    {detailDialog.sale.membership_items.map((item) => (
+                    {detailDialog.sale?.['sale']?.['membership_items']?.map((item) => (
                       <ListItem key={item.id} sx={{ border: '1px solid #e0e0e0', borderRadius: 1, mb: 1 }}>
                         <ListItemText
                           primary={item.plan_name}
@@ -601,22 +630,22 @@ export default function SalesHistory() {
                       <Typography>Subtotal:</Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography align="right">{formatPrice(detailDialog.sale.subtotal)}</Typography>
+                      <Typography align="right">{formatPrice(detailDialog.sale?.['sale']?.['subtotal'] || 0)}</Typography>
                     </Grid>
                     <Grid item xs={6}>
                       <Typography>IVA (19%):</Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography align="right">{formatPrice(detailDialog.sale.tax_amount)}</Typography>
+                      <Typography align="right">{formatPrice(detailDialog.sale?.['sale']?.['tax_amount'] || 0)}</Typography>
                     </Grid>
-                    {detailDialog.sale.discount_amount > 0 && (
+                    {detailDialog.sale?.['sale']?.['discount_amount'] > 0 && (
                       <>
                         <Grid item xs={6}>
                           <Typography color="success.main">Descuento:</Typography>
                         </Grid>
                         <Grid item xs={6}>
                           <Typography align="right" color="success.main">
-                            -{formatPrice(detailDialog.sale.discount_amount)}
+                            -{formatPrice(detailDialog.sale?.['sale']?.['discount_amount'] || 0)}
                           </Typography>
                         </Grid>
                       </>
@@ -629,22 +658,22 @@ export default function SalesHistory() {
                     </Grid>
                     <Grid item xs={6}>
                       <Typography variant="h6" fontWeight="bold" align="right">
-                        {formatPrice(detailDialog.sale.total_amount)}
+                        {formatPrice(detailDialog.sale?.['sale']?.['total_amount'] || 0)}
                       </Typography>
                     </Grid>
                     <Grid item xs={6}>
                       <Typography>Pagado:</Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography align="right">{formatPrice(detailDialog.sale.amount_paid)}</Typography>
+                      <Typography align="right">{formatPrice(detailDialog.sale?.['sale']?.['amount_paid'] || 0)}</Typography>
                     </Grid>
-                    {detailDialog.sale.change_amount > 0 && (
+                    {detailDialog.sale?.['sale']?.['change_amount'] > 0 && (
                       <>
                         <Grid item xs={6}>
                           <Typography>Cambio:</Typography>
                         </Grid>
                         <Grid item xs={6}>
-                          <Typography align="right">{formatPrice(detailDialog.sale.change_amount)}</Typography>
+                          <Typography align="right">{formatPrice(detailDialog.sale?.['sale']?.['change_amount'] || 0)}</Typography>
                         </Grid>
                       </>
                     )}
@@ -658,15 +687,15 @@ export default function SalesHistory() {
           <Button onClick={() => setDetailDialog({ open: false, sale: null })}>
             Cerrar
           </Button>
-          {canReverseSales && detailDialog.sale?.can_be_reversed && !detailDialog.sale?.is_reversed && (
+          {canReverseSales && detailDialog.sale?.['sale']?.['can_be_reversed'] && !detailDialog.sale?.['sale']?.['is_reversed'] && (
             <Button 
               color="warning" 
               variant="contained"
               startIcon={<Undo />}
               onClick={() => {
-                setDetailDialog({ open: false, sale: null });
-                if (detailDialog.sale) {
-                  handleReverseSale(detailDialog.sale);
+                setDetailDialog({ open: false, sale: null as unknown as SaleDetail | null });
+                if (detailDialog.sale?.['sale']) {
+                  handleReverseSale(detailDialog.sale?.['sale'] as unknown as Sale);
                 }
               }}
             >
@@ -687,7 +716,7 @@ export default function SalesHistory() {
           <Box display="flex" alignItems="center" gap={2}>
             <Warning color="warning" />
             <Typography variant="h6">
-              Reversar Venta {reverseDialog.sale?.sale_number}
+              Reversar Venta {reverseDialog.sale?.['sale']?.['sale_number']}
             </Typography>
           </Box>
         </DialogTitle>
@@ -708,13 +737,13 @@ export default function SalesHistory() {
             <Box mb={3}>
               <Typography variant="subtitle2" mb={1}>Detalles de la venta:</Typography>
               <Typography variant="body2">
-                Total: <strong>{formatPrice(reverseDialog.sale.total_amount)}</strong>
+                Total: <strong>{formatPrice(reverseDialog.sale?.['sale']?.['total_amount'] || 0)}</strong>
               </Typography>
               <Typography variant="body2">
-                Productos: {reverseDialog.sale.product_items?.length || 0}
+                Productos: {reverseDialog.sale?.['sale']?.['product_items']?.length || 0}
               </Typography>
               <Typography variant="body2">
-                Membresías: {reverseDialog.sale.membership_items?.length || 0}
+                Membresías: {reverseDialog.sale?.['sale']?.['membership_items']?.length || 0}
               </Typography>
             </Box>
           )}

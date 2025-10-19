@@ -33,7 +33,9 @@ import {
   ListItemButton,
   Avatar,
   Badge,
-  CircularProgress
+  CircularProgress,
+  FormControlLabel,
+  Switch
 } from '@mui/material';
 import {
   ShoppingCart,
@@ -49,7 +51,8 @@ import {
   CreditCard,
   AccountBalance,
   FitnessCenter,
-  Inventory
+  Inventory,
+  X
 } from '@mui/icons-material';
 import { AdminRoute } from '../../components/AdminRoute';
 import Sidebar from '../../components/Sidebar';
@@ -59,6 +62,7 @@ import inventoryService, { Product } from '../../services/inventory';
 import membershipPlansService, { MembershipPlan } from '../../services/membership-plans';
 import salesService from '../../services/sales';
 import { getClients } from '../../services/clients';
+import { parse } from 'path';
 
 interface CartItem {
   id: string;
@@ -91,6 +95,12 @@ export default function POSSystem() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
+  //Discount consts
+  // Agrega estos estados en tu componente
+  const [applyDiscount, setApplyDiscount] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountReason, setDiscountReason] = useState('');
   
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState(0); // 0: Productos, 1: Membresías
@@ -198,9 +208,9 @@ export default function POSSystem() {
 
   // Cálculos
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const tax = subtotal * 0.19; // IVA 19%
+  const tax = 0
   const total = subtotal + tax;
-  const change = amountPaid - total;
+  const change = amountPaid - total + discountAmount;
 
   const handlePayment = () => {
     setAmountPaid(total); // Pre-llenar con el total exacto
@@ -235,16 +245,20 @@ export default function POSSystem() {
         saleType = 'membership';
       }
 
+      console.log("Aplicar descuento: ", applyDiscount)
+
       // Crear venta
       const saleData = {
         customer_id: selectedCustomer?.id,
         sale_type: saleType,
         payment_method: paymentMethod,
         amount_paid: amountPaid,
-        discount_amount: 0,
         notes: '',
         products: products.length > 0 ? products : undefined,
-        memberships: memberships.length > 0 ? memberships : undefined
+        memberships: memberships.length > 0 ? memberships : undefined,
+        is_discount: applyDiscount,
+        discount_amount: discountAmount,
+        discount_reason: discountReason
       };
 
       const result = await salesService.createSale(saleData);
@@ -349,49 +363,69 @@ export default function POSSystem() {
 
                     {activeTab === 1 && (
                       <Grid container spacing={2}>
-                        {filteredPlans.map((plan) => (
-                          <Grid item xs={12} sm={6} md={4} key={plan.id}>
-                            <Card 
-                              sx={{ 
-                                cursor: 'pointer',
-                                '&:hover': { boxShadow: 3 },
-                                border: plan.is_popular ? '2px solid gold' : '1px solid #e0e0e0'
-                              }}
-                              onClick={() => {
-                                if (selectedCustomer) {
-                                  addToCart(plan, 'membership', selectedCustomer.id);
-                                } else {
-                                  alert('Selecciona un cliente para agregar membresía');
-                                }
-                              }}
-                            >
-                              <CardContent>
-                                {plan.is_popular && (
-                                  <Chip label="⭐ Popular" color="warning" size="small" sx={{ mb: 1 }} />
+                      {filteredPlans.map((plan) => (
+                        <Grid item xs={12} sm={6} md={4} key={plan.id} sx={{ display: 'flex' }}>
+                          <Card 
+                            sx={{ 
+                              cursor: 'pointer',
+                              '&:hover': { boxShadow: 3 },
+                              border: plan.is_popular ? '2px solid gold' : '1px solid #e0e0e0',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              width: '100%', // Ocupar todo el ancho del Grid item
+                              height: '100%', // Ocupar toda la altura disponible
+                            }}
+                            onClick={() => {
+                              if (selectedCustomer) {
+                                addToCart(plan, 'membership', selectedCustomer.id);
+                              } else {
+                                alert('Selecciona un cliente para agregar membresía');
+                              }
+                            }}
+                          >
+                            <CardContent sx={{ 
+                              flexGrow: 1, // Hacer que el contenido ocupe todo el espacio disponible
+                              display: 'flex',
+                              flexDirection: 'column',
+                              height: '100%'
+                            }}>
+                              {plan.is_popular && (
+                                <Chip label="⭐ Popular" color="warning" size="small" sx={{ mb: 1 }} />
+                              )}
+                              <Typography variant="h6" fontWeight="bold" gutterBottom>
+                                {plan.name}
+                              </Typography>
+                              <Typography 
+                                variant="body2" 
+                                color="text.secondary" 
+                                sx={{ 
+                                  flexGrow: 1, // Hacer que la descripción ocupe el espacio sobrante
+                                  mb: 2 
+                                }}
+                              >
+                                {plan.description}
+                              </Typography>
+                              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                                <Typography variant="h5" color="primary" fontWeight="bold">
+                                  ${plan.price.toLocaleString()}
+                                </Typography>
+                                <Typography variant="caption">
+                                  {plan.duration_days} días
+                                </Typography>
+                              </Box>
+                              <Box sx={{ mt: 'auto' }}> {/* Empujar hacia abajo */}
+                                {plan.includes_nutritionist && (
+                                  <Chip label="Nutricionista" size="small" sx={{ mr: 0.5, mb: 0.5 }} />
                                 )}
-                                <Typography variant="h6" fontWeight="bold">
-                                  {plan.name}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary" mb={1}>
-                                  {plan.description}
-                                </Typography>
-                                <Box display="flex" justifyContent="between" alignItems="center">
-                                  <Typography variant="h5" color="primary" fontWeight="bold">
-                                    ${plan.price.toLocaleString()}
-                                  </Typography>
-                                  <Typography variant="caption">
-                                    {plan.duration_days} días
-                                  </Typography>
-                                </Box>
-                                <Box mt={1}>
-                                  {plan.includes_nutritionist && <Chip label="Nutricionista" size="small" sx={{ mr: 0.5, mb: 0.5 }} />}
-                                  {plan.includes_classes && <Chip label="Clases" size="small" sx={{ mr: 0.5, mb: 0.5 }} />}
-                                </Box>
-                              </CardContent>
-                            </Card>
-                          </Grid>
-                        ))}
-                      </Grid>
+                                {plan.includes_classes && (
+                                  <Chip label="Clases" size="small" sx={{ mr: 0.5, mb: 0.5 }} />
+                                )}
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                      ))}
+                    </Grid>
                     )}
                   </Box>
                 </Paper>
@@ -522,10 +556,6 @@ export default function POSSystem() {
                       <Typography>Subtotal:</Typography>
                       <Typography>${subtotal.toLocaleString()}</Typography>
                     </Box>
-                    <Box display="flex" justifyContent="between" mb={1}>
-                      <Typography>IVA (19%):</Typography>
-                      <Typography>${tax.toLocaleString()}</Typography>
-                    </Box>
                     <Divider sx={{ my: 1 }} />
                     <Box display="flex" justifyContent="between" mb={2}>
                       <Typography variant="h6" fontWeight="bold">Total:</Typography>
@@ -575,7 +605,7 @@ export default function POSSystem() {
         <DialogContent>
           <Box mb={3}>
             <Typography variant="h4" color="primary" fontWeight="bold" textAlign="center">
-              Total: ${total.toLocaleString()}
+              Total: ${(total - discountAmount).toLocaleString()}
             </Typography>
           </Box>
 
@@ -602,21 +632,130 @@ export default function POSSystem() {
                 ))}
               </Grid>
             </Grid>
+              {/* Campo de monto pagado existente */}
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Monto Pagado"
+                  type="number"
+                  value={amountPaid.toString()}
+                  onChange={(e) => setAmountPaid(Number(e.target.value))}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                  }}
+                  error={amountPaid < (total - discountAmount)}
+                  helperText={amountPaid < (total - discountAmount) ? "Monto insuficiente" : change > 0 ? `Cambio: $${change.toLocaleString()}` : ""}
+                />
+              </Grid>
 
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Monto Pagado"
-                type="number"
-                value={amountPaid}
-                onChange={(e) => setAmountPaid(Number(e.target.value))}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                }}
-                error={amountPaid < total}
-                helperText={amountPaid < total ? "Monto insuficiente" : change > 0 ? `Cambio: $${change.toLocaleString()}` : ""}
-              />
-            </Grid>
+                {/* Nuevo grid para descuento */}
+                <Grid item xs={12}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12}>
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={applyDiscount}
+                                onChange={(e) => {
+                                  setApplyDiscount(e.target.checked);
+                                  if (!e.target.checked) {
+                                    setDiscountAmount(0);
+                                    setDiscountReason('');
+                                  }
+                                }}
+                              />
+                            }
+                            label="Aplicar Descuento"
+                          />
+                        </Grid>
+
+                        {applyDiscount && (
+                          <>
+                            <Grid item xs={12} md={0}>
+                              <TextField
+                                fullWidth
+                                label="Monto del Descuento"
+                                type="number"
+                                value={discountAmount.toString()  }
+                                onChange={(e) => {
+                                  console.log("Value change: ", e.target.value)
+                                  console.log("type_off: ", typeof(e.target.value))
+                                  const discount = Number(e.target.value);
+
+                                  setDiscountAmount(discount);
+                                  // Validar que el descuento no sea mayor al total
+                                  if (discount > total) {
+                                    setError('El descuento no puede ser mayor al total');
+                                  } else if (discount < 0) {
+                                    setError('El descuento no puede ser negativo');
+                                  } else {
+                                    setError('');
+                                  }
+                                }}
+                                InputProps={{
+                                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                                }}
+                                error={discountAmount > total || discountAmount < 0}
+                                helperText={
+                                  discountAmount > total 
+                                    ? "El descuento excede el total" 
+                                    : discountAmount < 0
+                                    ? "El descuento no puede ser negativo"
+                                    : `Nuevo total: $${(total - discountAmount).toLocaleString()}`
+                                }
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={0}>
+                              <TextField
+                                fullWidth
+                                label="Razón del Descuento"
+                                value={discountReason}
+                                onChange={(e) => setDiscountReason(e.target.value)}
+                                placeholder="Ej: Promoción especial, cliente frecuente, etc."
+                                helperText="Obligatorio para aplicar descuento"
+                              />
+                            </Grid>
+                            {discountAmount > 0 && (
+                              <Grid item xs={0}>
+                                <Alert 
+                                  severity="info" 
+                                  sx={{ mt: 1 }}
+                                  action={
+                                    <Button 
+                                      color="inherit" 
+                                      size="small"
+                                      onClick={() => {
+                                        setApplyDiscount(false);
+                                        setDiscountAmount(0);
+                                        setDiscountReason('');
+                                      }}
+                                    >
+                                      Quitar
+                                    </Button>
+                                  }
+                                >
+                                  <Typography variant="body2">
+                                    <strong>Descuento aplicado:</strong> ${discountAmount.toLocaleString()}
+                                  </Typography>
+                                  {discountReason && (
+                                    <Typography variant="body2">
+                                      <strong>Razón:</strong> {discountReason}
+                                    </Typography>
+                                  )}
+                                  <Typography variant="body2">
+                                    <strong>Total con descuento:</strong> ${(total - discountAmount).toLocaleString()}
+                                  </Typography>
+                                </Alert>
+                              </Grid>
+                            )}
+                          </>
+                        )}
+                      </Grid>
+                    </CardContent>
+                  </Card>
+                </Grid>
 
             {selectedCustomer && (
               <Grid item xs={12}>
