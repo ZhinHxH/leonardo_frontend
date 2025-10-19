@@ -15,8 +15,19 @@ import {
   Select,
   Divider,
   Paper,
-  Toolbar
+  Toolbar,
+  FormControlLabel,
+  Switch,
+  InputAdornment,
 } from '@mui/material';
+import {
+  // ... tus imports existentes
+  DirectionsCar,
+  TimeToLeave,
+  Description,
+  LocalParking,
+  Build, Palette, CalendarToday
+} from '@mui/icons-material';
 import { PersonAdd, Save, Cancel } from '@mui/icons-material';
 import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
@@ -42,6 +53,16 @@ interface UserFormData {
   eps: string;
   emergency_contact: string;
   emergency_phone: string;
+
+  // 🔹 Nuevos campos del vehículo
+  has_vehicle?:Boolean;
+  vehicle_plate?: string;
+  vehicle_type?: string;
+  vehicle_brand?: string;
+  vehicle_model?: string;
+  vehicle_color?: string;
+  vehicle_year?: string;
+  vehicle_description?: string;
 }
 
 const initialFormData: UserFormData = {
@@ -58,8 +79,18 @@ const initialFormData: UserFormData = {
   gender: '',
   eps: '',
   emergency_contact: '',
-  emergency_phone: ''
+  emergency_phone: '',
+
+  // 🔹 Campos del vehículo
+  vehicle_plate: '',
+  vehicle_type: '',
+  vehicle_brand: '',
+  vehicle_model: '',
+  vehicle_color: '',
+  vehicle_year: '',
+  vehicle_description: ''
 };
+
 
 const userRoles = [
   { value: 'admin', label: 'Administrador' },
@@ -92,7 +123,7 @@ export default function RegisterUser() {
   const [submitError, setSubmitError] = useState<string>('');
   const [submitSuccess, setSubmitSuccess] = useState<string>('');
   const [fieldErrors, setFieldErrors] = useState<{[key: string]: string}>({});
-
+  const [hasVehicle, setHasVehicle] = useState(false);
   // Configuración de validación del formulario
   const validationRules = {
     email: validations.email,
@@ -162,7 +193,17 @@ export default function RegisterUser() {
         birth_date: formData.birth_date,
         eps: formData.eps,
         emergency_contact: formData.emergency_contact,
-        emergency_phone: formData.emergency_phone
+        emergency_phone: formData.emergency_phone,
+
+        // 🔹 Datos del vehículo
+        has_vehicle: hasVehicle,
+        vehicle_plate: formData.vehicle_plate,
+        vehicle_type: formData.vehicle_type,
+        vehicle_brand: formData.vehicle_brand,
+        vehicle_model: formData.vehicle_model,
+        vehicle_color: formData.vehicle_color,
+        vehicle_year: formData.vehicle_year,
+        vehicle_description: formData.vehicle_description
       });
       
       console.log('🔄 Creando usuario:', userData);
@@ -513,6 +554,198 @@ export default function RegisterUser() {
                     </Grid>
                   </CardContent>
                 </Card>
+                <Card sx={{ mb: 3 }}>
+  <CardContent>
+    <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+      <Typography variant="h6" color="primary">
+        🏍️/🚗 Información del Vehículo
+      </Typography>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={hasVehicle}
+            onChange={(e) => {
+              setHasVehicle(e.target.checked);
+              if (!e.target.checked) {
+                // Limpiar campos si se desactiva el switch
+                [
+                  'vehicle_plate',
+                  'vehicle_type',
+                  'vehicle_brand',
+                  'vehicle_model',
+                  'vehicle_color',
+                  'vehicle_year',
+                  'vehicle_description'
+                ].forEach((field) => handleInputChange(field, ''));
+              }
+            }}
+          />
+        }
+        label="Registrar vehículo"
+      />
+    </Box>
+
+    <Divider sx={{ mb: 2 }} />
+
+    {hasVehicle ? (
+      <Grid container spacing={3}>
+        {/* PLACA */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            label="Placa del vehículo"
+            fullWidth
+            value={formData.vehicle_plate || ''}
+            onChange={(e) => {
+              const plate = e.target.value.toUpperCase();
+              handleInputChange('vehicle_plate', plate);
+            }}
+            placeholder="ABC123"
+            disabled={isSubmitting}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <DirectionsCar />
+                </InputAdornment>
+              ),
+            }}
+            helperText="Ingrese la placa en formato estándar"
+          />
+        </Grid>
+
+        {/* TIPO DE VEHÍCULO */}
+        <Grid item xs={12} md={6}>
+          <FormControl fullWidth>
+            <InputLabel>Tipo de vehículo</InputLabel>
+            <Select
+              value={formData.vehicle_type || ''}
+              onChange={(e) => handleInputChange('vehicle_type', e.target.value)}
+              disabled={isSubmitting}
+            >
+              <MenuItem value="CAR">Automóvil</MenuItem>
+              <MenuItem value="MOTORCYCLE">Motocicleta</MenuItem>
+              <MenuItem value="BICYCLE">Bicicleta</MenuItem>
+              <MenuItem value="OTHER">Otro</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+
+        {/* MARCA */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            label="Marca"
+            fullWidth
+            value={formData.vehicle_brand || ''}
+            onChange={(e) => handleInputChange('vehicle_brand', e.target.value)}
+            placeholder="Ej: Toyota, Honda, etc."
+            disabled={isSubmitting}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Build />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Grid>
+
+        {/* MODELO */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            label="Modelo"
+            fullWidth
+            value={formData.vehicle_model || ''}
+            onChange={(e) => handleInputChange('vehicle_model', e.target.value)}
+            placeholder="Ej: Corolla, Civic, Pulsar"
+            disabled={isSubmitting}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <TimeToLeave />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Grid>
+
+        {/* COLOR */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            label="Color"
+            fullWidth
+            value={formData.vehicle_color || ''}
+            onChange={(e) => handleInputChange('vehicle_color', e.target.value)}
+            placeholder="Ej: Rojo, Negro, Azul"
+            disabled={isSubmitting}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Palette />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Grid>
+
+        {/* AÑO */}
+        <Grid item xs={12} md={6}>
+          <TextField
+            label="Año"
+            type="number"
+            fullWidth
+            value={formData.vehicle_year || ''}
+            onChange={(e) => handleInputChange('vehicle_year', e.target.value)}
+            placeholder="Ej: 2022"
+            disabled={isSubmitting}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <CalendarToday />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Grid>
+
+        {/* DESCRIPCIÓN */}
+        <Grid item xs={12}>
+          <TextField
+            label="Descripción adicional"
+            fullWidth
+            multiline
+            rows={3}
+            value={formData.vehicle_description || ''}
+            onChange={(e) => handleInputChange('vehicle_description', e.target.value)}
+            placeholder="Color, modelo, características especiales, etc."
+            disabled={isSubmitting}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Description />
+                </InputAdornment>
+              ),
+            }}
+            helperText="Descripción detallada para identificación"
+          />
+        </Grid>
+
+        {/* ALERTA INFORMATIVA */}
+        <Grid item xs={12}>
+          <Alert severity="info" icon={<LocalParking />}>
+            <Typography variant="body2">
+              Esta información será utilizada para el control de parqueadero y seguridad del gimnasio.
+            </Typography>
+          </Alert>
+        </Grid>
+      </Grid>
+    ) : (
+      <Box textAlign="center" py={2}>
+        <Typography variant="body2" color="text.secondary">
+          Activa el interruptor para registrar un vehículo
+        </Typography>
+      </Box>
+    )}
+  </CardContent>
+</Card>
 
                 <Box display="flex" gap={2} justifyContent="flex-end">
                   <Button

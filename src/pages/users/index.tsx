@@ -44,13 +44,17 @@ import {
   PersonAdd,
   MedicalServices,
   FitnessCenter,
-  Timeline
+  Timeline,
+  DirectionsCar,
+  TwoWheeler,
+  PedalBike,
+  Close
 } from '@mui/icons-material';
 import { useRouter } from 'next/router';
 import { AdminRoute } from '../../components/AdminRoute';
 import Sidebar from '../../components/Sidebar';
 import Navbar from '../../components/Navbar';
-import { getClients, createClient, updateClient, deleteClient } from '../../services/clients';
+import { getClients, createClient, updateClient, deleteClient, getUserVehicles } from '../../services/clients';
 
 interface Membership {
   id: number;
@@ -59,6 +63,20 @@ interface Membership {
   end_date: string;
   price: number;
   payment_method: string;
+}
+
+interface Vehicle {
+  id?: number;
+  plate: string;
+  vehicle_type: 'CAR' | 'MOTORCYCLE' | 'BICYCLE' | 'OTHER';
+  brand?: string;
+  model?: string;
+  color?: string;
+  year?: number;
+  description?: string;
+  is_active?: boolean;
+  is_verified?: boolean;
+  _action?: string; // Para marcar si se debe eliminar
 }
 
 interface User {
@@ -72,6 +90,7 @@ interface User {
   created_at: string;
   last_login?: string;
   memberships?: Membership[];
+  vehicles?: Vehicle[];
 }
 
 interface ClinicalRecord {
@@ -101,6 +120,17 @@ export default function Users() {
     user: null
   });
   const [editForm, setEditForm] = useState<Partial<User>>({});
+  const [userVehicles, setUserVehicles] = useState<Vehicle[]>([]);
+  const [vehicleToAdd, setVehicleToAdd] = useState<Vehicle>({
+    plate: '',
+    vehicle_type: 'CAR',
+    brand: '',
+    model: '',
+    color: '',
+    year: new Date().getFullYear(),
+    description: '',
+    is_active: true
+  });
 
   // Estados de paginación
   const [page, setPage] = useState(0);
@@ -219,7 +249,7 @@ export default function Users() {
     router.push('/users/register');
   };
 
-  const handleEditUser = (user: User) => {
+  const handleEditUser = async (user: User) => {
     setEditForm({
       name: user.name,
       email: user.email,
@@ -228,13 +258,29 @@ export default function Users() {
       dni: user.dni,
       is_active: user.is_active
     });
+    
+    // Cargar vehículos del usuario
+    try {
+      const vehiclesData = await getUserVehicles(user.id);
+      setUserVehicles(vehiclesData.vehicles || []);
+    } catch (err) {
+      console.error('Error cargando vehículos:', err);
+      setUserVehicles([]);
+    }
+    
     setEditDialog({ open: true, user });
   };
 
-  const handleViewUser = (user: User) => {
+  const handleViewUser = async (user: User) => {
     setSelectedUser(user);
-    // Por ahora usar datos vacíos hasta implementar backend de historia clínica
-    setClinicalHistory([]);
+    // Cargar vehículos del usuario
+    try {
+      const vehiclesData = await getUserVehicles(user.id);
+      setUserVehicles(vehiclesData.vehicles || []);
+    } catch (err) {
+      console.error('Error cargando vehículos:', err);
+      setUserVehicles([]);
+    }
     setUserDetailDialog(true);
   };
 
@@ -267,9 +313,18 @@ export default function Users() {
     setError('');
     
     try {
-      await updateClient(editDialog.user.id, editForm);
+      // Incluir vehículos en el formulario de actualización
+      const updateData = {
+        ...editForm,
+        // Convertir rol a mayúsculas para que coincida con el enum del backend
+        role: editForm.role ? editForm.role.toUpperCase() : undefined,
+        vehicles: userVehicles
+      };
+      
+      await updateClient(editDialog.user.id, updateData);
       setEditDialog({ open: false, user: null });
       setEditForm({});
+      setUserVehicles([]);
       loadUsers(); // Recargar lista
       alert('Usuario actualizado exitosamente');
     } catch (err: any) {
@@ -277,6 +332,58 @@ export default function Users() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAddVehicle = () => {
+    if (!vehicleToAdd.plate) {
+      alert('Por favor ingresa una placa');
+      return;
+    }
+    
+    setUserVehicles([...userVehicles, { ...vehicleToAdd }]);
+    
+    // Resetear formulario de vehículo
+    setVehicleToAdd({
+      plate: '',
+      vehicle_type: 'CAR',
+      brand: '',
+      model: '',
+      color: '',
+      year: new Date().getFullYear(),
+      description: '',
+      is_active: true
+    });
+  };
+
+  const handleRemoveVehicle = (index: number) => {
+    const vehicle = userVehicles[index];
+    const updatedVehicles = [...userVehicles];
+    
+    if (vehicle.id) {
+      // Si el vehículo ya existe en la BD, marcarlo para eliminar
+      updatedVehicles[index] = { ...vehicle, _action: 'delete' };
+    } else {
+      // Si es nuevo, simplemente quitarlo de la lista
+      updatedVehicles.splice(index, 1);
+    }
+    
+    setUserVehicles(updatedVehicles);
+  };
+
+  const handleEditVehicle = (index: number, field: keyof Vehicle, value: any) => {
+    const updatedVehicles = [...userVehicles];
+    updatedVehicles[index] = { ...updatedVehicles[index], [field]: value };
+    setUserVehicles(updatedVehicles);
+  };
+
+  const getVehicleTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'CAR': 'Automóvil',
+      'MOTORCYCLE': 'Motocicleta',
+      'BICYCLE': 'Bicicleta',
+      'OTHER': 'Otro'
+    };
+    return labels[type] || type;
   };
 
   const formatDate = (dateString: string) => {
@@ -518,8 +625,7 @@ export default function Users() {
         <DialogContent>
           <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
             <Tab label="Información General" />
-            <Tab label="Historial Clínico" />
-            <Tab label="Objetivos" />
+            <Tab label="Vehículos" icon={<DirectionsCar />} iconPosition="start" />
           </Tabs>
 
           {activeTab === 0 && (
@@ -551,52 +657,148 @@ export default function Users() {
           {activeTab === 1 && (
             <Box pt={3}>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6">Historial Clínico</Typography>
-                <Button variant="outlined" size="small" startIcon={<Add />}>
-                  Agregar Registro
-                </Button>
+                <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <DirectionsCar /> Vehículos Registrados
+                </Typography>
+                <Chip 
+                  label={`${userVehicles.length} vehículo${userVehicles.length !== 1 ? 's' : ''}`} 
+                  color="primary" 
+                  variant="outlined"
+                />
               </Box>
               
-              {clinicalHistory.map((record) => (
-                <Card key={record.id} sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Box display="flex" justifyContent="space-between" alignItems="start">
-                      <Box>
-                        <Typography variant="subtitle2" fontWeight="bold">
-                          {record.type === 'weight_update' ? '📊 Actualización de Peso' : '📝 Nota Nutricional'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {formatDate(record.date)} - Por {record.created_by}
-                        </Typography>
-                        {record.weight && (
-                          <Typography variant="body1" sx={{ mt: 1 }}>
-                            Peso: <strong>{record.weight} kg</strong>
-                          </Typography>
-                        )}
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          {record.notes}
-                        </Typography>
-                      </Box>
-                      <Chip size="small" label={record.type} />
-                    </Box>
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
-          )}
-
-          {activeTab === 2 && (
-            <Box pt={3}>
-              <Typography variant="h6" mb={2}>Objetivos y Metas</Typography>
-              <Alert severity="info">
-                Funcionalidad de objetivos en desarrollo
-              </Alert>
+              {userVehicles.length === 0 ? (
+                <Alert severity="info">
+                  Este usuario no tiene vehículos registrados.
+                </Alert>
+              ) : (
+                <Grid container spacing={2}>
+                  {userVehicles.map((vehicle, index) => (
+                    <Grid item xs={12} md={6} key={index}>
+                      <Card variant="outlined" sx={{ 
+                        height: '100%',
+                        '&:hover': { boxShadow: 3, borderColor: 'primary.main' }
+                      }}>
+                        <CardContent>
+                          <Box>
+                            {/* Header del vehículo */}
+                            <Box display="flex" alignItems="center" gap={1} mb={2}>
+                              {vehicle.vehicle_type === 'CAR' && <DirectionsCar color="primary" fontSize="large" />}
+                              {vehicle.vehicle_type === 'MOTORCYCLE' && <TwoWheeler color="primary" fontSize="large" />}
+                              {vehicle.vehicle_type === 'BICYCLE' && <PedalBike color="primary" fontSize="large" />}
+                              <Box>
+                                <Typography variant="h6" component="div">
+                                  {vehicle.plate}
+                                </Typography>
+                                <Chip 
+                                  label={getVehicleTypeLabel(vehicle.vehicle_type)} 
+                                  size="small" 
+                                  color="primary" 
+                                  variant="outlined"
+                                />
+                              </Box>
+                            </Box>
+                            
+                            <Divider sx={{ my: 2 }} />
+                            
+                            {/* Detalles del vehículo */}
+                            <Grid container spacing={1.5}>
+                              {vehicle.brand && (
+                                <Grid item xs={6}>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    Marca
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight="medium">
+                                    {vehicle.brand}
+                                  </Typography>
+                                </Grid>
+                              )}
+                              
+                              {vehicle.model && (
+                                <Grid item xs={6}>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    Modelo
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight="medium">
+                                    {vehicle.model}
+                                  </Typography>
+                                </Grid>
+                              )}
+                              
+                              {vehicle.color && (
+                                <Grid item xs={6}>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    Color
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight="medium">
+                                    {vehicle.color}
+                                  </Typography>
+                                </Grid>
+                              )}
+                              
+                              {vehicle.year && (
+                                <Grid item xs={6}>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    Año
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight="medium">
+                                    {vehicle.year}
+                                  </Typography>
+                                </Grid>
+                              )}
+                              
+                              {vehicle.description && (
+                                <Grid item xs={12}>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    Descripción
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight="medium">
+                                    {vehicle.description}
+                                  </Typography>
+                                </Grid>
+                              )}
+                            </Grid>
+                            
+                            {/* Estado del vehículo */}
+                            <Box mt={2} display="flex" gap={1}>
+                              <Chip 
+                                label={vehicle.is_active ? 'Activo' : 'Inactivo'} 
+                                size="small" 
+                                color={vehicle.is_active ? 'success' : 'default'}
+                              />
+                              {vehicle.is_verified && (
+                                <Chip 
+                                  label="Verificado" 
+                                  size="small" 
+                                  color="info"
+                                  variant="outlined"
+                                />
+                              )}
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setUserDetailDialog(false)}>Cerrar</Button>
-          <Button variant="contained" startIcon={<Edit />}>
+          <Button onClick={() => {
+            setUserDetailDialog(false);
+            setUserVehicles([]);
+            setActiveTab(0);
+          }}>
+            Cerrar
+          </Button>
+          <Button variant="contained" startIcon={<Edit />} onClick={() => {
+            setUserDetailDialog(false);
+            if (selectedUser) {
+              handleEditUser(selectedUser);
+            }
+          }}>
             Editar Usuario
           </Button>
         </DialogActions>
@@ -606,80 +808,305 @@ export default function Users() {
       <Dialog
         open={editDialog.open}
         onClose={() => setEditDialog({ open: false, user: null })}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
         <DialogTitle>Editar Usuario</DialogTitle>
         <DialogContent>
-          <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Nombre"
-                value={editForm.name || ''}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                required
-              />
+          <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)} sx={{ mb: 2 }}>
+            <Tab label="Información Personal" />
+            <Tab label="Vehículos" icon={<DirectionsCar />} iconPosition="start" />
+          </Tabs>
+
+          {/* Tab de Información Personal */}
+          {activeTab === 0 && (
+            <Grid container spacing={3} sx={{ mt: 1 }}>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Nombre"
+                  value={editForm.name || ''}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Email"
+                  type="email"
+                  value={editForm.email || ''}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="DNI"
+                  value={editForm.dni || ''}
+                  onChange={(e) => setEditForm({ ...editForm, dni: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Teléfono"
+                  value={editForm.phone || ''}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Rol</InputLabel>
+                  <Select
+                    value={editForm.role || ''}
+                    label="Rol"
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  >
+                    <MenuItem value="admin">Administrador</MenuItem>
+                    <MenuItem value="manager">Gerente</MenuItem>
+                    <MenuItem value="trainer">Entrenador</MenuItem>
+                    <MenuItem value="receptionist">Recepcionista</MenuItem>
+                    <MenuItem value="member">Miembro</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Estado</InputLabel>
+                  <Select
+                    value={editForm.is_active ? 'active' : 'inactive'}
+                    label="Estado"
+                    onChange={(e) => setEditForm({ ...editForm, is_active: e.target.value === 'active' })}
+                  >
+                    <MenuItem value="active">Activo</MenuItem>
+                    <MenuItem value="inactive">Inactivo</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Email"
-                type="email"
-                value={editForm.email || ''}
-                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="DNI"
-                value={editForm.dni || ''}
-                onChange={(e) => setEditForm({ ...editForm, dni: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Teléfono"
-                value={editForm.phone || ''}
-                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Rol</InputLabel>
-                <Select
-                  value={editForm.role || ''}
-                  label="Rol"
-                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
-                >
-                  <MenuItem value="admin">Administrador</MenuItem>
-                  <MenuItem value="manager">Gerente</MenuItem>
-                  <MenuItem value="trainer">Entrenador</MenuItem>
-                  <MenuItem value="receptionist">Recepcionista</MenuItem>
-                  <MenuItem value="member">Miembro</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Estado</InputLabel>
-                <Select
-                  value={editForm.is_active ? 'active' : 'inactive'}
-                  label="Estado"
-                  onChange={(e) => setEditForm({ ...editForm, is_active: e.target.value === 'active' })}
-                >
-                  <MenuItem value="active">Activo</MenuItem>
-                  <MenuItem value="inactive">Inactivo</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
+          )}
+
+          {/* Tab de Vehículos */}
+          {activeTab === 1 && (
+            <Box sx={{ mt: 2 }}>
+              {/* Formulario para agregar nuevo vehículo */}
+              <Card sx={{ mb: 3, bgcolor: 'primary.50' }}>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Add /> Agregar Nuevo Vehículo
+                  </Typography>
+                  <Grid container spacing={2} sx={{ mt: 1 }}>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="Placa *"
+                        value={vehicleToAdd.plate}
+                        onChange={(e) => setVehicleToAdd({ ...vehicleToAdd, plate: e.target.value.toUpperCase() })}
+                        placeholder="Ej: ABC123"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Tipo de Vehículo</InputLabel>
+                        <Select
+                          value={vehicleToAdd.vehicle_type}
+                          label="Tipo de Vehículo"
+                          onChange={(e) => setVehicleToAdd({ ...vehicleToAdd, vehicle_type: e.target.value as any })}
+                        >
+                          <MenuItem value="CAR">
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <DirectionsCar /> Automóvil
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="MOTORCYCLE">
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <TwoWheeler /> Motocicleta
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="BICYCLE">
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <PedalBike /> Bicicleta
+                            </Box>
+                          </MenuItem>
+                          <MenuItem value="OTHER">Otro</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="Marca"
+                        value={vehicleToAdd.brand}
+                        onChange={(e) => setVehicleToAdd({ ...vehicleToAdd, brand: e.target.value })}
+                        placeholder="Ej: Toyota"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <TextField
+                        fullWidth
+                        label="Modelo"
+                        value={vehicleToAdd.model}
+                        onChange={(e) => setVehicleToAdd({ ...vehicleToAdd, model: e.target.value })}
+                        placeholder="Ej: Corolla"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <TextField
+                        fullWidth
+                        label="Color"
+                        value={vehicleToAdd.color}
+                        onChange={(e) => setVehicleToAdd({ ...vehicleToAdd, color: e.target.value })}
+                        placeholder="Ej: Blanco"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <TextField
+                        fullWidth
+                        type="number"
+                        label="Año"
+                        value={vehicleToAdd.year}
+                        onChange={(e) => setVehicleToAdd({ ...vehicleToAdd, year: parseInt(e.target.value) })}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        startIcon={<Add />}
+                        onClick={handleAddVehicle}
+                        sx={{ height: '56px' }}
+                      >
+                        Agregar
+                      </Button>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Descripción"
+                        multiline
+                        rows={2}
+                        value={vehicleToAdd.description}
+                        onChange={(e) => setVehicleToAdd({ ...vehicleToAdd, description: e.target.value })}
+                        placeholder="Información adicional del vehículo"
+                      />
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+
+              {/* Lista de vehículos existentes */}
+              <Typography variant="h6" gutterBottom>
+                Vehículos Registrados ({userVehicles.filter(v => v._action !== 'delete').length})
+              </Typography>
+              
+              {userVehicles.filter(v => v._action !== 'delete').length === 0 ? (
+                <Alert severity="info">
+                  Este usuario no tiene vehículos registrados. Agrega uno usando el formulario superior.
+                </Alert>
+              ) : (
+                <Grid container spacing={2}>
+                  {userVehicles.map((vehicle, index) => {
+                    if (vehicle._action === 'delete') return null;
+                    
+                    return (
+                      <Grid item xs={12} md={6} key={index}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Box display="flex" justifyContent="space-between" alignItems="start">
+                              <Box flex={1}>
+                                <Box display="flex" alignItems="center" gap={1} mb={1}>
+                                  {vehicle.vehicle_type === 'CAR' && <DirectionsCar color="primary" />}
+                                  {vehicle.vehicle_type === 'MOTORCYCLE' && <TwoWheeler color="primary" />}
+                                  {vehicle.vehicle_type === 'BICYCLE' && <PedalBike color="primary" />}
+                                  <Typography variant="h6" component="span">
+                                    {vehicle.plate}
+                                  </Typography>
+                                  <Chip 
+                                    label={getVehicleTypeLabel(vehicle.vehicle_type)} 
+                                    size="small" 
+                                    color="primary" 
+                                    variant="outlined"
+                                  />
+                                </Box>
+                                
+                                <Grid container spacing={1}>
+                                  <Grid item xs={6}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Marca"
+                                      value={vehicle.brand || ''}
+                                      onChange={(e) => handleEditVehicle(index, 'brand', e.target.value)}
+                                    />
+                                  </Grid>
+                                  <Grid item xs={6}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Modelo"
+                                      value={vehicle.model || ''}
+                                      onChange={(e) => handleEditVehicle(index, 'model', e.target.value)}
+                                    />
+                                  </Grid>
+                                  <Grid item xs={6}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Color"
+                                      value={vehicle.color || ''}
+                                      onChange={(e) => handleEditVehicle(index, 'color', e.target.value)}
+                                    />
+                                  </Grid>
+                                  <Grid item xs={6}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      type="number"
+                                      label="Año"
+                                      value={vehicle.year || ''}
+                                      onChange={(e) => handleEditVehicle(index, 'year', parseInt(e.target.value))}
+                                    />
+                                  </Grid>
+                                  <Grid item xs={12}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      multiline
+                                      rows={2}
+                                      label="Descripción"
+                                      value={vehicle.description || ''}
+                                      onChange={(e) => handleEditVehicle(index, 'description', e.target.value)}
+                                    />
+                                  </Grid>
+                                </Grid>
+                              </Box>
+                              
+                              <IconButton 
+                                color="error" 
+                                onClick={() => handleRemoveVehicle(index)}
+                                sx={{ ml: 1 }}
+                              >
+                                <Delete />
+                              </IconButton>
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                    );
+                  })}
+                </Grid>
+              )}
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditDialog({ open: false, user: null })}>
+          <Button onClick={() => {
+            setEditDialog({ open: false, user: null });
+            setUserVehicles([]);
+            setActiveTab(0);
+          }}>
             Cancelar
           </Button>
           <Button 
