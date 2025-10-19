@@ -77,7 +77,17 @@ const getMenuItems = (userRole: string) => {
         { text: 'Planes y Tarifas', icon: <AttachMoneyIcon />, href: '/admin/membership-plans' },
       ]
     },
-    { text: 'Reportes', icon: <AssessmentIcon />, href: '/reports', roles: ['admin', 'manager'] },
+    {
+      text: 'Reportes', 
+      icon: <AssessmentIcon />, 
+      roles: ['admin', 'manager'],
+      children: [
+        { text: 'Reporte de Usuarios', icon: <PeopleIcon />, href: '/reports/users' },
+        { text: 'Reporte de Ingresos', icon: <AttachMoneyIcon />, href: '/reports/revenue' },
+        { text: 'Reporte de Picos', icon: <AssessmentIcon />, href: '/reports/peaks' },
+        { text: 'Reporte de Inventario', icon: <InventoryIcon />, href: '/reports/inventory' },
+      ]
+    },
   ];
 
   const memberItems = [

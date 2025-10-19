@@ -96,7 +96,7 @@ export default function Inventory() {
   // Debounce para evitar múltiples llamadas mientras el usuario escribe
   const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms delay
   const [activeTab, setActiveTab] = useState(0);
-  const [showCosts, setShowCosts] = useState(user?.role === 'admin');
+  const [showCosts, setShowCosts] = useState(user?.role?.toUpperCase() === 'ADMIN');
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -190,7 +190,7 @@ export default function Inventory() {
         category_id: categoryFilter !== 'Todos' ? categories.find(c => c.name === categoryFilter)?.id : undefined,
         status: statusFilter !== 'Todos' ? statusFilter : undefined,
         search: debouncedSearchTerm || undefined,
-        include_costs: user?.role === 'admin',
+        include_costs: user?.role?.toUpperCase() === 'ADMIN',
         page: page,
         per_page: perPage
       });
@@ -446,8 +446,8 @@ export default function Inventory() {
     }
   };
 
-  const canModifyInventory = user?.role === 'admin';
-  const canViewCosts = user?.role === 'admin';
+  const canModifyInventory = user?.role?.toUpperCase() === 'ADMIN';
+  const canViewCosts = user?.role?.toUpperCase() === 'ADMIN';
 
   return (
     <AdminRoute allowedRoles={['admin', 'manager', 'receptionist']}>
