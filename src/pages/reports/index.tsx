@@ -50,6 +50,13 @@ const reportCards = [
     icon: <InventoryIcon sx={{ fontSize: 40, color: 'info.main' }} />,
     href: '/reports/inventory',
     color: '#17A2B8'
+  },
+  {
+    title: 'Cierres de Caja',
+    description: 'Historial y análisis de cierres de caja por turno',
+    icon: <AttachMoneyIcon sx={{ fontSize: 40, color: 'secondary.main' }} />,
+    href: '/reports/cashClosures',
+    color: '#6F42C1'
   }
 ];
 

@@ -1,0 +1,68 @@
+/* Animaciones para el modal de cierre de caja */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animateFadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animateSlideIn {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Mejoras adicionales para el modal */
+.cashClosureModal {
+  backdrop-filter: blur(4px);
+}
+
+.cashClosureContent {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.cashClosureContent::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cashClosureContent::-webkit-scrollbar-track {
+  background: #f7fafc;
+  border-radius: 3px;
+}
+
+.cashClosureContent::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.cashClosureContent::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* Responsive improvements */
+@media (max-width: 640px) {
+  .cashClosureModal {
+    padding: 0.5rem;
+  }
+  
+  .cashClosureContent {
+    max-height: 98vh;
+    margin: 0.25rem;
+  }
+}

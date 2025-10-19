@@ -28,7 +28,8 @@ import {
   Receipt as ReceiptIcon,
   MedicalServices as MedicalIcon,
   FitnessCenter as FitnessIcon,
-  TrendingUp as TrendingUpIcon
+  TrendingUp as TrendingUpIcon,
+  AccountBalance as AccountBalanceIcon
 } from '@mui/icons-material';
 import { useState } from 'react';
 import Link from 'next/link';
@@ -88,6 +89,7 @@ const getMenuItems = (userRole: string) => {
         { text: 'Reporte de Ingresos', icon: <AttachMoneyIcon />, href: '/reports/revenue' },
         { text: 'Reporte de Picos', icon: <TrendingUpIcon />, href: '/reports/peaks' },
         { text: 'Reporte de Inventario', icon: <InventoryIcon />, href: '/reports/inventory' },
+        { text: 'Cierres de Caja', icon: <AccountBalanceIcon />, href: '/reports/cashClosures' },
       ]
     },
   ];

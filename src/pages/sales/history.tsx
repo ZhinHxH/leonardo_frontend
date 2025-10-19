@@ -48,6 +48,7 @@ import Navbar from '../../components/Navbar';
 import { useAuth } from '../../contexts/AuthContext';
 import { Pagination } from '../../components/Pagination';
 import salesService from '../../services/sales';
+import CashClosure from '../../components/CashClosure';
 
 interface Sale {
   id: number;
@@ -107,6 +108,14 @@ export default function SalesHistory() {
   });
 
   const [reverseReason, setReverseReason] = useState('');
+
+  // Estados para cierre de caja
+  const [cashClosureOpen, setCashClosureOpen] = useState(false);
+  const [shiftStart, setShiftStart] = useState(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today.toISOString();
+  });
 
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -265,6 +274,20 @@ export default function SalesHistory() {
   };
 
   const canReverseSales = user?.role === 'admin' || user?.role === 'manager';
+  const canCreateCashClosure = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'receptionist';
+
+  const handleCashClosure = () => {
+    // Establecer el inicio del turno como el inicio del día actual
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setShiftStart(today.toISOString());
+    setCashClosureOpen(true);
+  };
+
+  const handleCashClosureSuccess = () => {
+    // Recargar ventas después del cierre exitoso
+    loadSales();
+  };
 
   return (
     <AdminRoute allowedRoles={['admin', 'manager', 'receptionist']}>
@@ -286,6 +309,16 @@ export default function SalesHistory() {
                   <Button variant="outlined" startIcon={<Download />}>
                     Exportar
                   </Button>
+                  {canCreateCashClosure && (
+                    <Button 
+                      variant="contained" 
+                      color="secondary" 
+                      startIcon={<AttachMoney />}
+                      onClick={handleCashClosure}
+                    >
+                      Cierre de Caja
+                    </Button>
+                  )}
                   <Button variant="contained" startIcon={<ShoppingCart />} href="/sales/pos">
                     Nueva Venta
                   </Button>
@@ -711,6 +744,14 @@ export default function SalesHistory() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Componente de Cierre de Caja */}
+      <CashClosure
+        isOpen={cashClosureOpen}
+        onClose={() => setCashClosureOpen(false)}
+        onSuccess={handleCashClosureSuccess}
+        shiftStart={shiftStart}
+      />
     </AdminRoute>
   );
 }
