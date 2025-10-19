@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useStockMonitoring } from '../../hooks/useStockMonitoring';
 import {
   Box,
   Button,
@@ -85,6 +86,13 @@ const colorOptions = [
 export default function Inventory() {
   const router = useRouter();
   const { user } = useAuth();
+  
+  // Configurar monitoreo de stock (solo manual, no automático)
+  const { manualCheck } = useStockMonitoring({
+    checkInterval: 0, // Desactivar verificación automática
+    enableNotifications: false, // Desactivar notificaciones automáticas
+    lowStockThreshold: 1.2 // 120% del stock mínimo
+  });
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [summary, setSummary] = useState<InventorySummary | null>(null);
@@ -445,7 +453,7 @@ export default function Inventory() {
   const canViewCosts = user?.role?.toUpperCase() === 'ADMIN';
 
   return (
-    <AdminRoute allowedRoles={['admin', 'manager', 'receptionist']}>
+    <AdminRoute allowedRoles={['ADMIN', 'MANAGER', 'RECEPTIONIST']}>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
         <Sidebar />
         <Box sx={{ flexGrow: 1 }}>
@@ -473,8 +481,62 @@ export default function Inventory() {
                       label="Mostrar Costos"
                     />
                   )}
-                  <Button variant="outlined" startIcon={<Download />}>
+                  {/* <Button 
+                    variant="outlined" 
+                    startIcon={<Download />}
+                    onClick={() => console.log('🔍 Verificando stock manualmente...')}
+                  >
                     Exportar
+                  </Button> */}
+                  <Button 
+                    variant="contained" 
+                    color="warning"
+                    onClick={async () => {
+                      // Crear una verificación manual con notificaciones habilitadas
+                      const { notificationService } = require('../../services/notificationService');
+                      
+                      try {
+                        // Obtener productos usando el servicio importado
+                        const result = await inventoryService.getProducts({
+                          status: 'active',
+                          per_page: 500,
+                          page: 1
+                        });
+
+                        const products = result.products;
+                        const lowStockProducts = products.filter(product => {
+                          const isLowStock = product.current_stock <= (product.min_stock * 1.2);
+                          return isLowStock && product.current_stock >= 0;
+                        });
+
+                        // Generar notificaciones para productos con stock bajo
+                        if (lowStockProducts.length > 0) {
+                          for (const product of lowStockProducts) {
+                            notificationService.notifyLowStock(
+                              product.name,
+                              product.current_stock,
+                              product.min_stock
+                            );
+                          }
+                        }
+                      } catch (error) {
+                        // Error silencioso
+                      }
+                    }}
+                    sx={{ ml: 1 }}
+                  >
+                    Verificar Stock
+                  </Button>
+                  <Button 
+                    variant="contained" 
+                    color="error"
+                    onClick={() => {
+                      const { notificationService } = require('../../services/notificationService');
+                      notificationService.notifyLowStock('Producto de Prueba', 5, 10);
+                    }}
+                    sx={{ ml: 1 }}
+                  >
+                    Prueba Notificación
                   </Button>
                 </Box>
               </Box>
@@ -894,7 +956,232 @@ export default function Inventory() {
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={3} sx={{ mt: 1 }}>
-            {/* Contenido del modal de producto... */}
+            {/* Información básica */}
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                Información Básica
+              </Typography>
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Nombre del Producto"
+                value={productForm.name || ''}
+                onChange={(e) => setProductForm({...productForm, name: e.target.value})}
+                required
+                error={!productForm.name}
+                helperText={!productForm.name ? 'El nombre es requerido' : ''}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Descripción"
+                value={productForm.description || ''}
+                onChange={(e) => setProductForm({...productForm, description: e.target.value})}
+                multiline
+                rows={2}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth required>
+                <InputLabel>Categoría</InputLabel>
+                <Select
+                  value={productForm.category_id || ''}
+                  label="Categoría"
+                  onChange={(e) => setProductForm({...productForm, category_id: Number(e.target.value)})}
+                  error={!productForm.category_id}
+                >
+                  {categories.map((category) => (
+                    <MenuItem key={category.id} value={category.id}>
+                      {category.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="SKU"
+                value={productForm.sku || ''}
+                onChange={(e) => setProductForm({...productForm, sku: e.target.value})}
+                placeholder="Código único del producto"
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Código de Barras"
+                value={productForm.barcode || ''}
+                onChange={(e) => setProductForm({...productForm, barcode: e.target.value})}
+                placeholder="Código de barras del producto"
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Unidad de Medida"
+                value={productForm.unit_of_measure || 'unidad'}
+                onChange={(e) => setProductForm({...productForm, unit_of_measure: e.target.value})}
+                select
+              >
+                <MenuItem value="unidad">Unidad</MenuItem>
+                <MenuItem value="kg">Kilogramo</MenuItem>
+                <MenuItem value="g">Gramo</MenuItem>
+                <MenuItem value="l">Litro</MenuItem>
+                <MenuItem value="ml">Mililitro</MenuItem>
+                <MenuItem value="m">Metro</MenuItem>
+                <MenuItem value="cm">Centímetro</MenuItem>
+                <MenuItem value="caja">Caja</MenuItem>
+                <MenuItem value="paquete">Paquete</MenuItem>
+              </TextField>
+            </Grid>
+            
+            {/* Precios y costos */}
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom>
+                Precios y Costos
+              </Typography>
+            </Grid>
+            
+            {canViewCosts && (
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Costo Unitario"
+                  type="number"
+                  value={productForm.current_cost || 0}
+                  onChange={(e) => setProductForm({...productForm, current_cost: Number(e.target.value)})}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">$</InputAdornment>
+                  }}
+                />
+              </Grid>
+            )}
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Precio de Venta"
+                type="number"
+                value={productForm.selling_price || 0}
+                onChange={(e) => setProductForm({...productForm, selling_price: Number(e.target.value)})}
+                required
+                error={!productForm.selling_price || productForm.selling_price <= 0}
+                helperText={!productForm.selling_price || productForm.selling_price <= 0 ? 'El precio debe ser mayor a 0' : ''}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={productForm.is_taxable || false}
+                    onChange={(e) => setProductForm({...productForm, is_taxable: e.target.checked})}
+                  />
+                }
+                label="Gravable con IVA"
+              />
+            </Grid>
+            
+            {productForm.is_taxable && (
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Tasa de IVA (%)"
+                  type="number"
+                  value={productForm.tax_rate || 19}
+                  onChange={(e) => setProductForm({...productForm, tax_rate: Number(e.target.value)})}
+                  InputProps={{
+                    endAdornment: <InputAdornment position="end">%</InputAdornment>
+                  }}
+                />
+              </Grid>
+            )}
+            
+            {/* Stock */}
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom>
+                Gestión de Stock
+              </Typography>
+            </Grid>
+            
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                label="Stock Actual"
+                type="number"
+                value={productForm.current_stock || 0}
+                onChange={(e) => setProductForm({...productForm, current_stock: Number(e.target.value)})}
+                required
+                error={productForm.current_stock !== undefined && productForm.current_stock < 0}
+                helperText={productForm.current_stock !== undefined && productForm.current_stock < 0 ? 'El stock no puede ser negativo' : ''}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                label="Stock Mínimo"
+                type="number"
+                value={productForm.min_stock || 5}
+                onChange={(e) => setProductForm({...productForm, min_stock: Number(e.target.value)})}
+                required
+                error={productForm.min_stock !== undefined && productForm.min_stock < 0}
+                helperText={productForm.min_stock !== undefined && productForm.min_stock < 0 ? 'El stock mínimo no puede ser negativo' : ''}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                label="Stock Máximo"
+                type="number"
+                value={productForm.max_stock || ''}
+                onChange={(e) => setProductForm({...productForm, max_stock: Number(e.target.value) || undefined})}
+                helperText="Opcional"
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Peso por Unidad (kg)"
+                type="number"
+                value={productForm.weight_per_unit || ''}
+                onChange={(e) => setProductForm({...productForm, weight_per_unit: Number(e.target.value) || undefined})}
+                helperText="Opcional"
+                inputProps={{ step: 0.01 }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Estado</InputLabel>
+                <Select
+                  value={productForm.status || 'active'}
+                  label="Estado"
+                  onChange={(e) => setProductForm({...productForm, status: e.target.value as any})}
+                >
+                  <MenuItem value="active">Activo</MenuItem>
+                  <MenuItem value="inactive">Inactivo</MenuItem>
+                  <MenuItem value="out_of_stock">Sin Stock</MenuItem>
+                  <MenuItem value="discontinued">Descontinuado</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
@@ -916,7 +1203,324 @@ export default function Inventory() {
         </DialogActions>
       </Dialog>
 
-      {/* Los demás modales se mantienen igual... */}
+      {/* Modal de categoría */}
+      <Dialog
+        open={categoryDialog.open}
+        onClose={() => setCategoryDialog({ open: false, category: null, isNew: false })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {categoryDialog.isNew ? 'Agregar Categoría' : 'Editar Categoría'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={3} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Nombre de la Categoría"
+                value={categoryForm.name || ''}
+                onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})}
+                required
+                error={!categoryForm.name}
+                helperText={!categoryForm.name ? 'El nombre es requerido' : ''}
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Descripción"
+                value={categoryForm.description || ''}
+                onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
+                multiline
+                rows={3}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Color</InputLabel>
+                <Select
+                  value={categoryForm.color || '#4CAF50'}
+                  label="Color"
+                  onChange={(e) => setCategoryForm({...categoryForm, color: e.target.value})}
+                >
+                  {colorOptions.map((color) => (
+                    <MenuItem key={color} value={color}>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <Box
+                          sx={{
+                            width: 20,
+                            height: 20,
+                            backgroundColor: color,
+                            borderRadius: '4px',
+                            border: '1px solid #ccc'
+                          }}
+                        />
+                        {color}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Icono"
+                value={categoryForm.icon || 'category'}
+                onChange={(e) => setCategoryForm({...categoryForm, icon: e.target.value})}
+                placeholder="Nombre del icono de Material-UI"
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={categoryForm.is_active !== false}
+                    onChange={(e) => setCategoryForm({...categoryForm, is_active: e.target.checked})}
+                  />
+                }
+                label="Categoría Activa"
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setCategoryDialog({ open: false, category: null, isNew: false })} 
+            startIcon={<Cancel />}
+            disabled={loading}
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleSaveCategory} 
+            variant="contained" 
+            startIcon={loading ? <CircularProgress size={20} /> : <Save />}
+            disabled={loading}
+          >
+            {loading ? 'Guardando...' : (categoryDialog.isNew ? 'Crear Categoría' : 'Guardar Cambios')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal de restock */}
+      <Dialog
+        open={restockDialog.open}
+        onClose={() => setRestockDialog({ open: false, product: null })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Restock: {restockDialog.product?.name}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={3} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Cantidad a Agregar"
+                type="number"
+                value={restockForm.quantity}
+                onChange={(e) => setRestockForm({...restockForm, quantity: Number(e.target.value)})}
+                required
+                error={restockForm.quantity <= 0}
+                helperText={restockForm.quantity <= 0 ? 'La cantidad debe ser mayor a 0' : ''}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Costo Unitario"
+                type="number"
+                value={restockForm.unit_cost}
+                onChange={(e) => setRestockForm({...restockForm, unit_cost: Number(e.target.value)})}
+                required
+                error={restockForm.unit_cost <= 0}
+                helperText={restockForm.unit_cost <= 0 ? 'El costo debe ser mayor a 0' : ''}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Nuevo Precio de Venta"
+                type="number"
+                value={restockForm.new_selling_price}
+                onChange={(e) => setRestockForm({...restockForm, new_selling_price: Number(e.target.value)})}
+                helperText="Opcional - dejar en 0 para mantener precio actual"
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Proveedor"
+                value={restockForm.supplier_name}
+                onChange={(e) => setRestockForm({...restockForm, supplier_name: e.target.value})}
+                required
+                error={!restockForm.supplier_name}
+                helperText={!restockForm.supplier_name ? 'El proveedor es requerido' : ''}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Número de Factura"
+                value={restockForm.invoice_number}
+                onChange={(e) => setRestockForm({...restockForm, invoice_number: e.target.value})}
+                placeholder="Opcional"
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Notas"
+                value={restockForm.notes}
+                onChange={(e) => setRestockForm({...restockForm, notes: e.target.value})}
+                multiline
+                rows={3}
+                placeholder="Notas adicionales sobre el restock..."
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setRestockDialog({ open: false, product: null })} 
+            startIcon={<Cancel />}
+            disabled={loading}
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleSaveRestock} 
+            variant="contained" 
+            startIcon={loading ? <CircularProgress size={20} /> : <Add />}
+            disabled={loading}
+          >
+            {loading ? 'Procesando...' : 'Registrar Restock'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal de historial de costos */}
+      <Dialog
+        open={historyDialog.open}
+        onClose={() => setHistoryDialog({ open: false, product: null })}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Historial de Costos: {historyDialog.product?.name}
+        </DialogTitle>
+        <DialogContent>
+          {historyLoading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" py={4}>
+              <CircularProgress />
+            </Box>
+          ) : costHistory.length === 0 ? (
+            <Typography color="text.secondary" align="center" py={4}>
+              No hay historial de costos disponible
+            </Typography>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Fecha</TableCell>
+                    <TableCell>Costo Unitario</TableCell>
+                    <TableCell>Cantidad</TableCell>
+                    <TableCell>Costo Total</TableCell>
+                    <TableCell>Proveedor</TableCell>
+                    <TableCell>Notas</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {costHistory.map((record) => (
+                    <TableRow key={record.id}>
+                      <TableCell>{formatDate(record.purchase_date)}</TableCell>
+                      <TableCell>{formatPrice(record.cost_per_unit)}</TableCell>
+                      <TableCell>{record.quantity_purchased}</TableCell>
+                      <TableCell>{formatPrice(record.total_cost)}</TableCell>
+                      <TableCell>{record.supplier_name || '-'}</TableCell>
+                      <TableCell>{record.notes || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setHistoryDialog({ open: false, product: null })} 
+            startIcon={<Cancel />}
+          >
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal de confirmación de eliminación */}
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, item: null, type: 'product' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Confirmar Eliminación
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            ¿Estás seguro de que deseas eliminar{' '}
+            <strong>{deleteDialog.item?.name}</strong>?
+            {deleteDialog.type === 'category' && deleteDialog.item?.product_count > 0 && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                Esta categoría tiene {deleteDialog.item.product_count} productos asignados. 
+                No se puede eliminar hasta que se reasignen o eliminen esos productos.
+              </Alert>
+            )}
+            {deleteDialog.type === 'product' && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                Esta acción no se puede deshacer. Se eliminarán todos los datos relacionados con este producto.
+              </Alert>
+            )}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setDeleteDialog({ open: false, item: null, type: 'product' })} 
+            startIcon={<Cancel />}
+            disabled={loading}
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={confirmDelete} 
+            variant="contained" 
+            color="error"
+            startIcon={loading ? <CircularProgress size={20} /> : <Delete />}
+            disabled={loading || (deleteDialog.type === 'category' && deleteDialog.item?.product_count > 0)}
+          >
+            {loading ? 'Eliminando...' : 'Eliminar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </AdminRoute>
   );

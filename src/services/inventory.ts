@@ -270,6 +270,69 @@ class InventoryService {
       throw new Error(error.response?.data?.detail || 'Error exportando inventario');
     }
   }
+
+  // Nuevos métodos para reportes
+  async getCompleteInventoryReport(params?: {
+    date_from?: string;
+    date_to?: string;
+  }): Promise<{
+    stats: InventorySummary;
+    stock_movements: any[];
+    category_values: any[];
+    low_stock_items: any[];
+    top_products: any[];
+    trends: any[];
+  }> {
+    try {
+      const response = await api.get('/inventory/reports/complete', { params });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Error obteniendo reporte completo');
+    }
+  }
+
+  async getStockMovementsReport(params?: {
+    date_from?: string;
+    date_to?: string;
+  }): Promise<any[]> {
+    try {
+      const response = await api.get('/inventory/reports/stock-movements', { params });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Error obteniendo movimientos de stock');
+    }
+  }
+
+  async getCategoryValuesReport(): Promise<any[]> {
+    try {
+      const response = await api.get('/inventory/reports/category-values');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Error obteniendo valores por categoría');
+    }
+  }
+
+  async getTopProductsReport(limit: number = 10): Promise<any[]> {
+    try {
+      const response = await api.get('/inventory/reports/top-products', {
+        params: { limit }
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Error obteniendo productos más vendidos');
+    }
+  }
+
+  async getInventoryTrendsReport(months: number = 6): Promise<any[]> {
+    try {
+      const response = await api.get('/inventory/reports/trends', {
+        params: { months }
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Error obteniendo tendencias del inventario');
+    }
+  }
 }
 
 export default InventoryService.getInstance();

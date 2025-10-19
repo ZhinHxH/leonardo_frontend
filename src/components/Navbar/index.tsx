@@ -13,20 +13,19 @@ import {
   Tooltip
 } from '@mui/material';
 import {
-  Notifications as NotificationsIcon,
-  Brightness4 as Brightness4Icon,
-  Brightness7 as Brightness7Icon,
   Fullscreen as FullscreenIcon,
   AccountCircle as AccountCircleIcon,
   Logout as LogoutIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Notifications as NotificationsSettingsIcon
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import NotificationBell from '../NotificationBell';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const { isDarkMode, toggleTheme, theme } = useTheme();
+  const { theme } = useTheme();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -50,12 +49,6 @@ export default function Navbar() {
     }
   };
 
-  const currentTime = new Date().toLocaleTimeString('es-CO', { 
-    hour: '2-digit', 
-    minute: '2-digit',
-    hour12: true 
-  });
-
   return (
     <AppBar 
       position="fixed" 
@@ -70,32 +63,16 @@ export default function Navbar() {
       <Toolbar>
         <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
           <Typography variant="h6" fontWeight={700} sx={{ color: theme.palette.secondary.main }}>
-            Sistema de Gestión Petardas
+            Sistema de Gestion J&D
           </Typography>
-          <Box sx={{ ml: 'auto', mr: 2 }}>
-            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-              {currentTime}
-            </Typography>
-          </Box>
         </Box>
         
-        <Tooltip title="Notificaciones">
-          <IconButton sx={{ color: theme.palette.secondary.main }}>
-            <Badge badgeContent={3} color="error">
-              <NotificationsIcon />
-            </Badge>
-          </IconButton>
-        </Tooltip>
+        {/* Componente de notificaciones */}
+        <NotificationBell color={theme.palette.secondary.main} />
 
         <Tooltip title="Pantalla completa">
           <IconButton sx={{ color: theme.palette.secondary.main }} onClick={handleFullscreen}>
             <FullscreenIcon />
-          </IconButton>
-        </Tooltip>
-
-        <Tooltip title={isDarkMode ? "Tema claro" : "Tema oscuro"}>
-          <IconButton sx={{ color: theme.palette.secondary.main }} onClick={toggleTheme}>
-            {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
         </Tooltip>
 
@@ -181,6 +158,16 @@ export default function Navbar() {
         <MenuItem onClick={handleMenuClose} sx={{ py: 1.5 }}>
           <SettingsIcon sx={{ mr: 2, color: theme.palette.secondary.main }} />
           <Typography>Configuración</Typography>
+        </MenuItem>
+        <MenuItem 
+          onClick={() => {
+            handleMenuClose();
+            window.location.href = '/settings/notifications';
+          }} 
+          sx={{ py: 1.5 }}
+        >
+          <NotificationsSettingsIcon sx={{ mr: 2, color: theme.palette.secondary.main }} />
+          <Typography>Notificaciones</Typography>
         </MenuItem>
         <Divider />
         <MenuItem onClick={handleLogout} sx={{ py: 1.5 }}>

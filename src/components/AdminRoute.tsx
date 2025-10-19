@@ -10,7 +10,7 @@ interface AdminRouteProps {
 
 export const AdminRoute: React.FC<AdminRouteProps> = ({ 
   children, 
-  allowedRoles = ['admin', 'manager', 'receptionist'] 
+  allowedRoles = ['ADMIN', 'MANAGER', 'RECEPTIONIST'] 
 }) => {
   const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
@@ -22,7 +22,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
   }, [isAuthenticated, isLoading, router]);
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated && user && !allowedRoles.includes(user.role)) {
+    if (!isLoading && isAuthenticated && user && !allowedRoles.includes(user.role.toUpperCase())) {
       router.push('/dashboard');
     }
   }, [isAuthenticated, isLoading, user, allowedRoles, router]);
@@ -48,7 +48,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     return null;
   }
 
-  if (user && !allowedRoles.includes(user.role)) {
+  if (user && !allowedRoles.includes(user.role.toUpperCase())) {
     return (
       <Box
         display="flex"

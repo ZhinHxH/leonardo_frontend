@@ -322,7 +322,7 @@ export default function ClinicalHistory() {
   };
 
   return (
-    <AdminRoute allowedRoles={['admin', 'manager', 'trainer', 'receptionist']}>
+    <AdminRoute allowedRoles={['ADMIN', 'MANAGER', 'TRAINER', 'RECEPTIONIST']}>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
         <Sidebar />
         <Box sx={{ flexGrow: 1 }}>

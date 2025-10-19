@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useStockMonitoringAfterSale } from '../../hooks/useStockMonitoring';
 import {
   Box,
   Button,
@@ -90,6 +91,9 @@ interface Customer {
 
 export default function POSSystem() {
   const { user } = useAuth();
+  
+  // Hook para monitorear stock después de ventas
+  const { checkStockAfterSale } = useStockMonitoringAfterSale();
   const [products, setProducts] = useState<Product[]>([]);
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -268,7 +272,17 @@ export default function POSSystem() {
       setPaymentDialog(false);
       setAmountPaid(0);
       
-      alert(`¡Venta procesada exitosamente!\nNúmero de venta: ${result.sale_number}`);
+      // alert(`¡Venta procesada exitosamente!\nNúmero de venta: ${result.sale_number}`);
+      
+      // Verificar stock después de la venta
+      const soldProducts = cart.filter(item => item.type === 'product').map(item => ({
+        productId: item.product_id!,
+        quantity: item.quantity
+      }));
+      
+      if (soldProducts.length > 0) {
+        await checkStockAfterSale(soldProducts);
+      }
       
       // Recargar productos para actualizar stock
       loadInitialData();
@@ -292,7 +306,7 @@ export default function POSSystem() {
   );
 
   return (
-    <AdminRoute allowedRoles={['admin', 'manager', 'receptionist']}>
+    <AdminRoute allowedRoles={['ADMIN', 'MANAGER', 'RECEPTIONIST']}>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
         <Sidebar />
         <Box sx={{ flexGrow: 1 }}>

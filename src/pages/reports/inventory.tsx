@@ -17,7 +17,11 @@ import {
   TableHead,
   TableRow,
   LinearProgress,
-  Toolbar
+  Toolbar,
+  Button,
+  ButtonGroup,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import { 
   Inventory, 
@@ -26,7 +30,12 @@ import {
   Warning,
   CheckCircle,
   AttachMoney,
-  Assessment
+  Assessment,
+  Refresh,
+  Download,
+  PictureAsPdf,
+  TableChart,
+  FileDownload
 } from '@mui/icons-material';
 import DateRangeFilter from '../../components/DateRangeFilter';
 import { CustomLineChart, CustomBarChart, CustomPieChart, CustomAreaChart } from '../../components/Charts';
@@ -46,6 +55,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import Sidebar from '../../components/Sidebar';
 import Navbar from '../../components/Navbar';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
+import inventoryReportsService from '../../services/inventoryReports';
+import { debugInventoryReport } from '../../utils/debugInventoryReport';
 
 interface InventoryStats {
   totalValue: number;
@@ -117,65 +128,83 @@ export default function InventoryReport() {
     setError(null);
     
     try {
-      // Simulación de datos - en producción esto vendría de la API
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Obtener datos reales del backend
+      const reportData = await inventoryReportsService.getCompleteReport({
+        date_from: startDate.toISOString().split('T')[0],
+        date_to: endDate.toISOString().split('T')[0]
+      });
       
-      // Datos simulados para el reporte de inventario
+      // Mapear datos del backend a formato del frontend
       setInventoryStats({
-        totalValue: 12500000,
-        totalProducts: 47,
-        lowStockItems: 8,
-        outOfStockItems: 2,
-        totalMovements: 156,
-        averageCost: 265957
+        totalValue: reportData.stats.total_inventory_value,
+        totalProducts: reportData.stats.total_products,
+        lowStockItems: reportData.stats.low_stock_count,
+        outOfStockItems: reportData.stats.out_of_stock_count,
+        totalMovements: reportData.stock_movements.length,
+        averageCost: reportData.stats.total_inventory_cost 
+          ? reportData.stats.total_inventory_cost / reportData.stats.total_products 
+          : 0
       });
 
-      setStockMovements([
-        { date: '2024-01-01', purchases: 450000, sales: 320000, adjustments: 15000, netMovement: 145000 },
-        { date: '2024-01-02', purchases: 380000, sales: 410000, adjustments: -5000, netMovement: -35000 },
-        { date: '2024-01-03', purchases: 520000, sales: 380000, adjustments: 10000, netMovement: 150000 },
-        { date: '2024-01-04', purchases: 290000, sales: 450000, adjustments: -8000, netMovement: -168000 },
-        { date: '2024-01-05', purchases: 610000, sales: 520000, adjustments: 12000, netMovement: 102000 },
-        { date: '2024-01-06', purchases: 420000, sales: 480000, adjustments: -3000, netMovement: -63000 },
-        { date: '2024-01-07', purchases: 380000, sales: 390000, adjustments: 5000, netMovement: -5000 }
-      ]);
+      // Mapear movimientos de stock
+      const mappedMovements = reportData.stock_movements.map(movement => ({
+        date: movement.date,
+        purchases: movement.purchases,
+        sales: movement.sales,
+        adjustments: movement.adjustments,
+        netMovement: movement.net_movement
+      }));
+      setStockMovements(mappedMovements);
 
-      setCategoryValues([
-        { category: 'Suplementos', value: 5200000, percentage: 41.6, products: 18 },
-        { category: 'Bebidas', value: 2100000, percentage: 16.8, products: 12 },
-        { category: 'Accesorios', value: 1900000, percentage: 15.2, products: 8 },
-        { category: 'Snacks Saludables', value: 1800000, percentage: 14.4, products: 6 },
-        { category: 'Ropa Deportiva', value: 1500000, percentage: 12.0, products: 3 }
-      ]);
+      // Mapear valores por categoría
+      const mappedCategoryValues = reportData.category_values.map(category => ({
+        category: category.category,
+        value: category.value,
+        percentage: category.percentage,
+        products: category.products
+      }));
+      setCategoryValues(mappedCategoryValues);
 
-      setLowStockItems([
-        { product: 'Proteína Whey Premium', currentStock: 3, minStock: 5, category: 'Suplementos', value: 360000, status: 'low' },
-        { product: 'Creatina Monohidrato', currentStock: 2, minStock: 10, category: 'Suplementos', value: 100000, status: 'critical' },
-        { product: 'Guantes de Entrenamiento', currentStock: 0, minStock: 5, category: 'Accesorios', value: 0, status: 'out' },
-        { product: 'Bebida Energética Natural', currentStock: 8, minStock: 20, category: 'Bebidas', value: 32000, status: 'low' },
-        { product: 'Barra Proteica Chocolate', currentStock: 1, minStock: 15, category: 'Snacks Saludables', value: 3000, status: 'critical' },
-        { product: 'Toalla Deportiva', currentStock: 0, minStock: 10, category: 'Accesorios', value: 0, status: 'out' }
-      ]);
+      // Mapear productos con stock bajo
+      const mappedLowStockItems = reportData.low_stock_items.map(item => ({
+        product: item.product,
+        currentStock: item.current_stock,
+        minStock: item.min_stock,
+        category: item.category,
+        value: item.value,
+        status: item.status
+      }));
+      setLowStockItems(mappedLowStockItems);
 
-      setTopProducts([
-        { product: 'Proteína Whey Premium', sales: 45, revenue: 5400000, profit: 1575000, margin: 29.2 },
-        { product: 'Bebida Energética Natural', sales: 120, revenue: 480000, profit: 180000, margin: 37.5 },
-        { product: 'Barra Proteica Chocolate', sales: 89, revenue: 267000, profit: 80100, margin: 30.0 },
-        { product: 'Creatina Monohidrato', sales: 23, revenue: 1150000, profit: 368000, margin: 32.0 },
-        { product: 'Guantes de Entrenamiento', sales: 15, revenue: 375000, profit: 150000, margin: 40.0 }
-      ]);
+      // Mapear productos más vendidos
+      const mappedTopProducts = reportData.top_products.map(product => ({
+        product: product.product,
+        sales: product.sales,
+        revenue: product.revenue,
+        profit: product.profit,
+        margin: product.margin
+      }));
+      setTopProducts(mappedTopProducts);
 
-      setInventoryTrend([
-        { month: 'Ene', totalValue: 11800000, movements: 45, growth: 5.2 },
-        { month: 'Feb', totalValue: 12100000, movements: 52, growth: 2.5 },
-        { month: 'Mar', totalValue: 12300000, movements: 48, growth: 1.7 },
-        { month: 'Abr', totalValue: 12500000, movements: 56, growth: 1.6 },
-        { month: 'May', totalValue: 12800000, movements: 61, growth: 2.4 },
-        { month: 'Jun', totalValue: 12500000, movements: 58, growth: -2.3 }
-      ]);
+      // Mapear tendencias del inventario
+      const rawTrends = reportData.trends || [];
+      const mappedTrends = rawTrends.map(trend => ({
+        month: trend.month,
+        totalValue: trend.total_value || 0,
+        movements: trend.movements || 0,
+        growth: trend.growth || 0
+      }));
       
-    } catch (err) {
-      setError('Error al cargar los datos del reporte de inventario');
+      // Validar y formatear datos para el gráfico
+      const isValid = debugInventoryReport.validateTrendsData(mappedTrends);
+      const finalTrends = isValid ? mappedTrends : debugInventoryReport.createSampleTrendsData();
+      
+      console.log('📊 Tendencias del inventario procesadas:', finalTrends);
+      setInventoryTrend(finalTrends);
+      
+    } catch (err: any) {
+      console.error('Error fetching inventory report:', err);
+      setError(err.message || 'Error al cargar los datos del reporte de inventario');
     } finally {
       setLoading(false);
     }
@@ -193,6 +222,55 @@ export default function InventoryReport() {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     setStartDate(thirtyDaysAgo);
     setEndDate(new Date());
+    fetchInventoryReport();
+  };
+
+  const handleExportReport = async (format: 'pdf' | 'excel' | 'csv') => {
+    try {
+      setLoading(true);
+      let blob: Blob;
+      
+      switch (format) {
+        case 'pdf':
+          blob = await inventoryReportsService.exportToPDF({
+            date_from: startDate?.toISOString().split('T')[0],
+            date_to: endDate?.toISOString().split('T')[0]
+          });
+          break;
+        case 'excel':
+          blob = await inventoryReportsService.exportToExcel({
+            date_from: startDate?.toISOString().split('T')[0],
+            date_to: endDate?.toISOString().split('T')[0]
+          });
+          break;
+        case 'csv':
+          blob = await inventoryReportsService.exportToCSV({
+            date_from: startDate?.toISOString().split('T')[0],
+            date_to: endDate?.toISOString().split('T')[0]
+          });
+          break;
+        default:
+          throw new Error('Formato no soportado');
+      }
+
+      // Crear enlace de descarga
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `reporte-inventario-${new Date().toISOString().split('T')[0]}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (error: any) {
+      setError(`Error exportando reporte: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefreshData = () => {
     fetchInventoryReport();
   };
 
@@ -263,9 +341,53 @@ export default function InventoryReport() {
           <Navbar />
           <Toolbar />
           <Container maxWidth="xl" sx={{ py: 4 }}>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600, mb: 4 }}>
-              📦 Reporte de Inventario
-            </Typography>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+              <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
+                📦 Reporte de Inventario
+              </Typography>
+              
+              <Box display="flex" gap={2}>
+                <Tooltip title="Actualizar datos">
+                  <IconButton 
+                    onClick={handleRefreshData} 
+                    disabled={loading}
+                    color="primary"
+                  >
+                    <Refresh />
+                  </IconButton>
+                </Tooltip>
+                
+                <ButtonGroup variant="outlined" size="small">
+                  <Tooltip title="Exportar a PDF">
+                    <Button 
+                      startIcon={<PictureAsPdf />}
+                      onClick={() => handleExportReport('pdf')}
+                      disabled={loading}
+                    >
+                      PDF
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="Exportar a Excel">
+                    <Button 
+                      startIcon={<TableChart />}
+                      onClick={() => handleExportReport('excel')}
+                      disabled={loading}
+                    >
+                      Excel
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="Exportar a CSV">
+                    <Button 
+                      startIcon={<FileDownload />}
+                      onClick={() => handleExportReport('csv')}
+                      disabled={loading}
+                    >
+                      CSV
+                    </Button>
+                  </Tooltip>
+                </ButtonGroup>
+              </Box>
+            </Box>
 
             <DateRangeFilter
               startDate={startDate}

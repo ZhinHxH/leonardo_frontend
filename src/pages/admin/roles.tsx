@@ -255,7 +255,7 @@ export default function Roles() {
   };
 
   return (
-    <AdminRoute allowedRoles={['admin']}>
+    <AdminRoute allowedRoles={['ADMIN']}>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
         <Sidebar />
         <Box sx={{ flexGrow: 1 }}>

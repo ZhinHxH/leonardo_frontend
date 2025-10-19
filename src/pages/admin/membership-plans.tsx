@@ -188,7 +188,7 @@ export default function MembershipPlans() {
   };
 
   return (
-    <AdminRoute allowedRoles={['admin', 'manager']}>
+    <AdminRoute allowedRoles={['ADMIN', 'MANAGER']}>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
         <Sidebar />
         <Box sx={{ flexGrow: 1 }}>

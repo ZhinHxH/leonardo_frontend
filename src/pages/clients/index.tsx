@@ -196,7 +196,7 @@ export default function Clients() {
   };
 
   return (
-    <AdminRoute allowedRoles={['admin', 'manager', 'receptionist']}>
+    <AdminRoute allowedRoles={['ADMIN', 'MANAGER', 'RECEPTIONIST']}>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
         <Sidebar />
         <Box sx={{ flexGrow: 1 }}>
