@@ -35,7 +35,7 @@ import { AdminRoute } from '../../components/AdminRoute';
 import Sidebar from '../../components/Sidebar';
 import Navbar from '../../components/Navbar';
 import { useFormValidation, validations } from '../../hooks/useFormValidation';
-import { createClient } from '../../services/clients';
+import { createClient, getClients } from '../../services/clients';
 
 interface UserFormData {
   [key: string]: string;
@@ -179,8 +179,8 @@ export default function RegisterUser() {
         gender: data.gender?.toUpperCase() || undefined
       });
 
-      // Preparar datos para el backend
-      const userData = transformToBackendValues({
+      // Preparar datos básicos del usuario
+      const baseUserData = {
         name: formData.name,
         email: formData.email,
         password: formData.password,
@@ -193,17 +193,27 @@ export default function RegisterUser() {
         birth_date: formData.birth_date,
         eps: formData.eps,
         emergency_contact: formData.emergency_contact,
-        emergency_phone: formData.emergency_phone,
+        emergency_phone: formData.emergency_phone
+      };
 
-        // 🔹 Datos del vehículo
-        has_vehicle: hasVehicle,
+      // 🔹 Solo agregar datos del vehículo si hasVehicle es true
+      const vehicleData = hasVehicle ? {
+        has_vehicle: true,
         vehicle_plate: formData.vehicle_plate,
         vehicle_type: formData.vehicle_type,
         vehicle_brand: formData.vehicle_brand,
         vehicle_model: formData.vehicle_model,
         vehicle_color: formData.vehicle_color,
-        vehicle_year: formData.vehicle_year,
+        vehicle_year: formData.vehicle_year ? parseInt(formData.vehicle_year) : undefined,
         vehicle_description: formData.vehicle_description
+      } : {
+        has_vehicle: false
+      };
+
+      // Preparar datos para el backend
+      const userData = transformToBackendValues({
+        ...baseUserData,
+        ...vehicleData
       });
       
       console.log('🔄 Creando usuario:', userData);
