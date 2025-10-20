@@ -8,7 +8,15 @@ import {
   Paper,
   Toolbar,
   CircularProgress,
-  Alert
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
+  Avatar
 } from '@mui/material';
 import { People as PeopleIcon } from '@mui/icons-material';
 import { useRouter } from 'next/router';
@@ -17,6 +25,7 @@ import Sidebar from '../../components/Sidebar';
 import Navbar from '../../components/Navbar';
 import DateRangeFilter from '../../components/DateRangeFilter';
 import { CustomLineChart, CustomBarChart, CustomPieChart } from '../../components/Charts';
+import { getUsersReport } from '../../services/reports';
 
 interface UserStats {
   total_users: number;
@@ -27,6 +36,18 @@ interface UserStats {
   gender_distribution: Array<{ gender: string; count: number }>;
   daily_registrations: Array<{ date: string; count: number }>;
   membership_distribution: Array<{ membership_type: string; count: number }>;
+  users_list: Array<{
+    id: number;
+    name: string;
+    email: string;
+    dni: string;
+    phone: string;
+    role: string;
+    is_active: boolean;
+    created_at: string;
+    membership_type?: string;
+    membership_status?: string;
+  }>;
 }
 
 export default function UsersReport() {
@@ -46,44 +67,31 @@ export default function UsersReport() {
       setLoading(true);
       setError(null);
       
-      // Simular datos de ejemplo (en producción esto vendría de la API)
-      const mockStats: UserStats = {
-        total_users: 1250,
-        new_users: 45,
-        active_users: 980,
-        inactive_users: 270,
-        age_distribution: [
-          { age_range: '18-25', count: 320 },
-          { age_range: '26-35', count: 450 },
-          { age_range: '36-45', count: 280 },
-          { age_range: '46-55', count: 150 },
-          { age_range: '55+', count: 50 }
-        ],
-        gender_distribution: [
-          { gender: 'Masculino', count: 750 },
-          { gender: 'Femenino', count: 500 }
-        ],
-        daily_registrations: [
-          { date: '2024-01-01', count: 5 },
-          { date: '2024-01-02', count: 8 },
-          { date: '2024-01-03', count: 12 },
-          { date: '2024-01-04', count: 7 },
-          { date: '2024-01-05', count: 15 },
-          { date: '2024-01-06', count: 9 },
-          { date: '2024-01-07', count: 11 }
-        ],
-        membership_distribution: [
-          { membership_type: 'Básica', count: 400 },
-          { membership_type: 'Premium', count: 350 },
-          { membership_type: 'VIP', count: 200 },
-          { membership_type: 'Sin membresía', count: 300 }
-        ]
+      // Formatear fechas para la API
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      // Obtener datos reales del backend
+      const response = await getUsersReport(startDateStr, endDateStr);
+      
+      // Transformar la respuesta para que coincida con la interfaz
+      const transformedStats: UserStats = {
+        total_users: response.user_stats.total_users,
+        new_users: response.user_stats.new_users,
+        active_users: response.user_stats.active_users,
+        inactive_users: response.user_stats.inactive_users,
+        age_distribution: response.age_distribution,
+        gender_distribution: response.gender_distribution,
+        daily_registrations: response.daily_registrations,
+        membership_distribution: response.membership_distribution,
+        users_list: response.users_list
       };
       
-      setStats(mockStats);
+      setStats(transformedStats);
       
     } catch (err: any) {
-      setError(err.message);
+      console.error('Error cargando estadísticas de usuarios:', err);
+      setError(err.response?.data?.detail || err.message || 'Error al cargar los datos');
     } finally {
       setLoading(false);
     }
@@ -104,7 +112,7 @@ export default function UsersReport() {
   };
 
   return (
-    <ProtectedRoute allowedRoles={['admin', 'manager']}>
+    <ProtectedRoute>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
         <Sidebar />
         <Box sx={{ flexGrow: 1 }}>
@@ -251,6 +259,98 @@ export default function UsersReport() {
                   </Grid>
                 </Grid>
               </>
+            )}
+
+            {/* Tabla de usuarios */}
+            {stats && stats.users_list && stats.users_list.length > 0 && (
+              <Grid container spacing={3} sx={{ mt: 2 }}>
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 3 }}>
+                    <Typography variant="h6" gutterBottom>
+                      👥 Lista de Usuarios ({stats.users_list.length})
+                    </Typography>
+                    <TableContainer>
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Usuario</TableCell>
+                            <TableCell>Contacto</TableCell>
+                            <TableCell>Rol</TableCell>
+                            <TableCell>Estado</TableCell>
+                            <TableCell>Membresía</TableCell>
+                            <TableCell>Fecha Registro</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {stats.users_list.map((user) => (
+                            <TableRow key={user.id}>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                                    {user.name.charAt(0).toUpperCase()}
+                                  </Avatar>
+                                  <Box>
+                                    <Typography variant="subtitle2" fontWeight="bold">
+                                      {user.name}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      ID: {user.id}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">{user.email}</Typography>
+                                {user.phone && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {user.phone}
+                                  </Typography>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={user.role.toUpperCase()} 
+                                  size="small" 
+                                  color={user.role === 'admin' ? 'error' : user.role === 'manager' ? 'warning' : 'default'}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={user.is_active ? 'Activo' : 'Inactivo'} 
+                                  size="small" 
+                                  color={user.is_active ? 'success' : 'error'}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Box>
+                                  <Typography variant="body2" fontWeight="bold">
+                                    {user.membership_type || 'Sin membresía'}
+                                  </Typography>
+                                  {user.membership_status && (
+                                    <Chip 
+                                      label={user.membership_status} 
+                                      size="small" 
+                                      color={user.membership_status === 'Activa' ? 'success' : 'default'}
+                                    />
+                                  )}
+                                </Box>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {new Date(user.created_at).toLocaleDateString('es-ES')}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Date(user.created_at).toLocaleTimeString('es-ES')}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Paper>
+                </Grid>
+              </Grid>
             )}
           </Box>
         </Box>
